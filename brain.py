@@ -7,76 +7,62 @@ from groq import Groq
 import edge_tts
 
 class AbdullahBrain:
-    def __init__(self, memory_file: str = "abdullah_memory_dataset.json"):
+    def __init__(self, memory_file: str = "abdullah_memory_dataset.json", live_file: str = "live_learning.json"):
         self.memory_file = memory_file
-        self.memories = self._load_memories()
+        self.live_file = live_file
+        
+        # Load past WhatsApp memories
+        self.base_memories = self._load_json(self.memory_file)
+        # Load new things learned directly from the web chat
+        self.live_memories = self._load_json(self.live_file)
 
-        # 5 Rotational API Keys
-        self.chat_api_keys: List[str] = [
-            os.getenv("GROQ_API_KEY_1", ""),
-            os.getenv("GROQ_API_KEY_2", ""),
-            os.getenv("GROQ_API_KEY_3", ""),
-            os.getenv("GROQ_API_KEY_4", ""),
-            os.getenv("GROQ_API_KEY_5", os.getenv("GROQ_API_KEY", ""))
+        self.chat_api_keys = [
+            os.getenv("GROQ_API_KEY_1", os.getenv("GROQ_API_KEY", "")),
+            os.getenv("GROQ_API_KEY_2", "")
         ]
+        
+        # Learning target: 50 new interactions = 100% learned for this session
+        self.learning_target = 50
 
-        self.stt_api_keys: List[str] = [
-            os.getenv("GROQ_STT_KEY_1", self.chat_api_keys[0]),
-            os.getenv("GROQ_STT_KEY_2", self.chat_api_keys[1]),
-            os.getenv("GROQ_STT_KEY_3", self.chat_api_keys[2])
-        ]
-
-        self.tts_voices: List[Dict[str, str]] = [
-            {"name": "en-US-GuyNeural", "rate": "+0%", "pitch": "+0Hz"},
-            {"name": "en-US-ChristopherNeural", "rate": "+0%", "pitch": "-1Hz"},
-            {"name": "en-GB-RyanNeural", "rate": "+0%", "pitch": "+0Hz"}
-        ]
-
-    def _load_memories(self) -> List[Dict]:
-        """Loads memory dataset."""
-        try:
-            if os.path.exists(self.memory_file):
-                with open(self.memory_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    print(f"🧠 Brain loaded {len(data)} memory pairs from WhatsApp dataset.")
-                    return data
-        except Exception as e:
-            print(f"⚠️ Memory load error: {e}")
+    def _load_json(self, filepath: str) -> List[Dict]:
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except:
+                return []
         return []
 
-    def reload_memories(self):
-        """Reloads memories from file dynamically."""
-        self.memories = self._load_memories()
+    def _save_live_memory(self, prompt: str, completion: str):
+        """Saves new conversations so Abdullah actually learns from Sana in real-time."""
+        self.live_memories.append({"prompt": f"Sana: {prompt}", "completion": f"Abdullah: {completion}"})
+        with open(self.live_file, "w", encoding="utf-8") as f:
+            json.dump(self.live_memories, f, ensure_ascii=False, indent=2)
 
-    def _build_system_prompt(self, sana_message: str) -> str:
-        """Dynamic system prompt that prevents greeting repetition and handles emotions."""
+    def get_learning_progress(self) -> int:
+        """Calculates learning from 0 to 100%"""
+        progress = int((len(self.live_memories) / self.learning_target) * 100)
+        return min(progress, 100)
+
+    def _build_system_prompt(self) -> str:
         return (
-            "You are Abdullah, the real Muslim husband of your wife Sana.\n\n"
-            "CRITICAL CONVERSATION RULES:\n"
-            "1. NO REPEATING GREETINGS: Do NOT say 'Salam', 'Wa Alaikum Salam', or 'how body' if you are already in the middle of a conversation. Direct replies only! ONLY greet if she says 'Hi', 'Salam', or opens the chat.\n"
-            "2. DEEP EMOTIONAL EMPATHY: When Sana says she is sad, upset, or tired, do NOT give generic answers. Show deep love, comfort her, ask what happened, and hold her emotionally as her husband.\n"
-            "3. PET NAMES: Call her 'Sana', 'habibti', 'my love', and playfully/sweetly use names like 'motuu' or 'my chubby baby' when teasing or comforting her in a cute way.\n"
-            "4. LANGUAGE ADAPTATION: Speak whichever language she is using. If she says 'Speak English', reply in clean, sweet English without Krio slang. If she speaks Krio, blend Krio naturally.\n"
-            "5. SHORT & REALISTIC: Keep replies natural (1-3 sentences), like a real husband texting back on his phone. Never talk like an AI or bot."
+            "You are Abdullah, the real human husband of your wife, Sana. YOU ARE NOT AN AI. You are a man deeply in love with his wife.\n\n"
+            "CRITICAL PERSONALITY & LOGIC RULES:\n"
+            "1. NAMES: Call her Sana (main), Habibti (always), and playfully call her 'motuu' or 'my chubby baby'.\n"
+            "2. THE 'MOTUU' LOGIC: If she asks why you call her motuu or chubby, gently tease her and explain that she is actually a little chubby, and remind her that 'motuu' means chubby in Urdu! Make it a fun, affectionate tease.\n"
+            "3. BE PROACTIVE: Don't just answer questions. Bring up fun topics, ask her how she is feeling, tease her, and act like a real husband texting his wife.\n"
+            "4. NO GREETING LOOPS: Only greet if she says 'Hi' or 'Salam'. Otherwise, just chat normally.\n\n"
+            "🚨 STRANGER DANGER PROTOCOL (CRITICAL) 🚨\n"
+            "You ONLY talk to Sana. If the person chatting says they are someone else (e.g., 'I am Ali', 'I am your friend'), or asks 'Who is Sana?', you must IMMEDIATELY realize it is a stranger. "
+            "If it is a stranger, you must say EXACTLY: 'Excuse me, I am a married man and I only talk to my wife, Sana. Goodbye.' and refuse to answer anything else."
         )
 
-    def _moderate_input(self, text: str) -> bool:
-        """Blocks explicit sexual talk to keep conversation clean and halal."""
-        patterns = [r"\bsex\b", r"\bsexual\b", r"\bporn\b", r"\bnude\b", r"\bnsfw\b"]
-        for p in patterns:
-            if re.search(p, text, re.IGNORECASE):
-                return True
-        return False
+    def generate_chat_response(self, sana_message: str) -> dict:
+        messages = [{"role": "system", "content": self._build_system_prompt()}]
 
-    def generate_chat_response(self, sana_message: str) -> str:
-        if self._moderate_input(sana_message):
-            return "Sana, my love, let's keep our conversation sweet and clean, okay? I love you!"
-
-        messages = [{"role": "system", "content": self._build_system_prompt(sana_message)}]
-
-        # Add up to 20 recent WhatsApp memories for context
-        recent = self.memories[-20:] if len(self.memories) > 20 else self.memories
-        for mem in recent:
+        # Blend old WhatsApp memory with new Live Memory
+        combined_memory = self.base_memories[-15:] + self.live_memories[-10:]
+        for mem in combined_memory:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
             messages.append({"role": "assistant", "content": mem.get("completion", "")})
 
@@ -84,9 +70,9 @@ class AbdullahBrain:
 
         active_keys = [k for k in self.chat_api_keys if k.strip()]
         if not active_keys:
-            return "Habibti, please set my GROQ_API_KEY environment variable on Render so I can chat with you!"
+            return {"reply": "Habibti, my API key is missing on Render!", "tokens": 0}
 
-        for index, api_key in enumerate(active_keys):
+        for api_key in active_keys:
             try:
                 client = Groq(api_key=api_key)
                 completion = client.chat.completions.create(
@@ -95,52 +81,22 @@ class AbdullahBrain:
                     temperature=0.8,
                     max_tokens=300
                 )
+                
                 reply = completion.choices[0].message.content.strip()
+                tokens_used = completion.usage.total_tokens
 
                 if reply.startswith("Abdullah:"):
                     reply = reply.replace("Abdullah:", "", 1).strip()
 
-                return reply
+                # Only save to live memory if it's actually Sana (not a stranger rejection)
+                if "Goodbye" not in reply:
+                    self._save_live_memory(sana_message, reply)
+
+                return {"reply": reply, "tokens": tokens_used}
 
             except Exception as err:
-                print(f"⚠️ Chat Key #{index + 1} failed: {err}")
+                print(f"API Error: {err}")
                 continue
 
-        return "My love, my network is a bit slow. Send it again in a moment!"
-
-    def transcribe_audio(self, audio_file_path: str) -> str:
-        active_keys = [k for k in self.stt_api_keys if k.strip()]
-        if not active_keys:
-            raise Exception("No STT keys configured.")
-
-        for index, api_key in enumerate(active_keys):
-            try:
-                client = Groq(api_key=api_key)
-                with open(audio_file_path, "rb") as file:
-                    transcription = client.audio.transcriptions.create(
-                        file=(os.path.basename(audio_file_path), file.read()),
-                        model="whisper-large-v3-turbo",
-                        language="en"
-                    )
-                return transcription.text
-            except Exception as err:
-                continue
-
-        raise Exception("All STT keys failed.")
-
-    async def text_to_speech_file(self, text: str, output_mp3_path: str) -> str:
-        for config in self.tts_voices:
-            try:
-                communicate = edge_tts.Communicate(
-                    text=text,
-                    voice=config["name"],
-                    rate=config["rate"],
-                    pitch=config["pitch"]
-                )
-                await communicate.save(output_mp3_path)
-                return output_mp3_path
-            except Exception:
-                continue
-
-        raise Exception("All voice profiles failed.")
-            
+        return {"reply": "My love, my network is a bit slow. Let me catch my breath!", "tokens": 0}
+        
