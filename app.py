@@ -5,10 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from brain import AbdullahBrain
+from upload_whatsapp import parse_whatsapp_chat
 
-app = FastAPI(title="Abdullah AI Backend Engine")
+app = FastAPI(title="Abdullah AI Backend Server")
 
-# Enable CORS so frontend can connect cleanly
+# Enable CORS for phone and web clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +18,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Brain
+# Automatically generate memory JSON from WhatsApp file if dataset doesn't exist
+if not os.path.exists("abdullah_memory_dataset.json"):
+    print("⚡ Auto-parsing WhatsApp chat on startup...")
+    parse_whatsapp_chat()
+
 brain = AbdullahBrain()
 
 class ChatPayload(BaseModel):
@@ -25,9 +30,12 @@ class ChatPayload(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "online", "system": "Abdullah AI Brain Active & Listening"}
+    return {
+        "status": "online",
+        "system": "Abdullah AI Brain Online",
+        "memories_loaded": len(brain.memories)
+    }
 
-# 1. 💬 Chat Endpoint
 @app.post("/chat")
 async def chat_endpoint(payload: ChatPayload):
     sana_text = payload.message.strip()
@@ -37,13 +45,11 @@ async def chat_endpoint(payload: ChatPayload):
     reply = brain.generate_chat_response(sana_text)
     return {"response": reply}
 
-# 2. 🎙️ Voice-To-Text Endpoint (STT)
 @app.post("/transcribe")
 async def transcribe_endpoint(file: UploadFile = File(...)):
     if not file:
         raise HTTPException(status_code=400, detail="Audio file required.")
 
-    # Save temp audio file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(await file.read())
         temp_audio_path = temp_audio.name
@@ -57,7 +63,6 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         if os.path.exists(temp_audio_path):
             os.remove(temp_audio_path)
 
-# 3. 🔊 Text-To-Voice Endpoint (Live Realistic Voice)
 @app.post("/speak")
 async def speak_endpoint(payload: ChatPayload):
     text = payload.message.strip()
@@ -74,6 +79,5 @@ async def speak_endpoint(payload: ChatPayload):
             filename="abdullah_voice.mp3"
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Voice synthesis failed: {str(e)}")
-
-# To run locally: uvicorn app:app --reload
+        raise HTTPException(status_code=500, detail=f"Voice synthesis error: {str(e)}")
+        
