@@ -4,7 +4,9 @@ import os
 import glob
 
 def find_chat_file() -> str:
-    """Finds any exported WhatsApp txt file regardless of name or emojis."""
+    """Finds chat.txt or any WhatsApp txt file in the repository."""
+    if os.path.exists("chat.txt"):
+        return "chat.txt"
     txt_files = glob.glob("*.txt")
     for f in txt_files:
         if f.lower() != "requirements.txt":
@@ -40,11 +42,9 @@ def parse_whatsapp_chat(txt_file_path: str = None, output_json_path: str = "abdu
             sender = match.group(1).strip().lower()
             message = match.group(2).strip()
 
-            # Skip system lines and omitted media
             if "media omitted" in message.lower() or "end-to-end encrypted" in message.lower():
                 continue
 
-            # Check for Sana or Abdullah
             if "sana" in sender or "wife" in sender:
                 last_sana_msg = message
             elif ("abdullah" in sender or "messi" in sender or "goat" in sender) and last_sana_msg:
