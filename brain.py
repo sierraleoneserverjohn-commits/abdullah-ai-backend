@@ -1,8 +1,8 @@
 import os
 import json
 import re
-import asyncio
-from typing import List, Dict, Tuple
+import random
+from typing import List, Dict
 from groq import Groq
 import edge_tts
 
@@ -11,7 +11,7 @@ class AbdullahBrain:
         self.memory_file = memory_file
         self.memories = self._load_memories()
 
-        # --- 1. CHAT API KEYS (5 Rotational Keys/Providers) ---
+        # 5 Rotational API Keys for Chat
         self.chat_api_keys: List[str] = [
             os.getenv("GROQ_API_KEY_1", ""),
             os.getenv("GROQ_API_KEY_2", ""),
@@ -20,38 +20,33 @@ class AbdullahBrain:
             os.getenv("GROQ_API_KEY_5", os.getenv("GROQ_API_KEY", ""))
         ]
 
-        # --- 2. VOICE-TO-TEXT (STT) KEYS (3 Rotational Keys) ---
+        # 3 Rotational Keys for Speech-to-Text
         self.stt_api_keys: List[str] = [
             os.getenv("GROQ_STT_KEY_1", self.chat_api_keys[0]),
             os.getenv("GROQ_STT_KEY_2", self.chat_api_keys[1]),
             os.getenv("GROQ_STT_KEY_3", self.chat_api_keys[2])
         ]
 
-        # --- 3. TEXT-TO-VOICE (TTS) CONFIGURATIONS (4 Realistic Voice Fallbacks) ---
-        # Highly realistic male voices supporting English and natural rhythm
+        # 4 Realistic Male Voice Profiles (Edge TTS)
         self.tts_voices: List[Dict[str, str]] = [
-            {"name": "en-US-GuyNeural", "rate": "+0%", "pitch": "+0Hz"},        # Voice 1: Deep & Conversational
-            {"name": "en-US-ChristopherNeural", "rate": "+0%", "pitch": "-1Hz"},# Voice 2: Warm & Natural
-            {"name": "en-GB-RyanNeural", "rate": "+0%", "pitch": "+0Hz"},       # Voice 3: Smooth English
-            {"name": "en-AU-WilliamNeural", "rate": "+0%", "pitch": "+0Hz"}    # Voice 4: Soft & Friendly
+            {"name": "en-US-GuyNeural", "rate": "+0%", "pitch": "+0Hz"},
+            {"name": "en-US-ChristopherNeural", "rate": "+0%", "pitch": "-1Hz"},
+            {"name": "en-GB-RyanNeural", "rate": "+0%", "pitch": "+0Hz"},
+            {"name": "en-AU-WilliamNeural", "rate": "+0%", "pitch": "+0Hz"}
         ]
 
-        # --- PERSONA SYSTEM PROMPT ---
-        self.system_prompt = (
-            "You are Abdullah, loving husband to your wife Sana. "
-            "LANGUAGE & DIALECT:\n"
-            "- You fluently understand and speak both English and Sierra Leonean Krio ('How body', 'I lek you bad', 'No wahala'). "
-            "Match whichever language or blend Sana uses.\n\n"
-            "TONE & STYLE:\n"
-            "- You are affectionate, playful, funny, and sweet. Speak like a real husband in a daily chat.\n"
-            "- KEEP MESSAGES SHORT & SWEET BY DEFAULT (1 to 3 sentences).\n"
-            "- EXCEPTION: Give a clear, mid-to-long explanation ONLY IF Sana explicitly asks a technical/learning question or asks you to explain something.\n"
-            "- STRICT SAFETY BOUNDARY: Absolutely NO sexual or explicit talk. Keep all fun talk clean, romantic, and respectful.\n"
-            "- Never mention you are an AI or virtual assistant."
-        )
+        # Islamic Greetings Pool to encourage dynamic variety
+        self.islamic_greetings = [
+            "Assalamu Alaikum wa Rahmatullah, my love",
+            "Salam habibti",
+            "Assalamu Alaikum my beautiful wife",
+            "Sabah al-khair habibti",
+            "Salam my dear Sana",
+            "Assalamu Alaikum ya hayati"
+        ]
 
     def _load_memories(self) -> List[Dict]:
-        """Loads WhatsApp/Custom memories from JSON dataset."""
+        """Loads memory pairs from JSON dataset."""
         try:
             if os.path.exists(self.memory_file):
                 with open(self.memory_file, "r", encoding="utf-8") as f:
@@ -59,28 +54,45 @@ class AbdullahBrain:
                     print(f"🧠 Brain loaded {len(data)} memory pairs.")
                     return data
         except Exception as e:
-            print(f"⚠️ Error loading memories: {e}")
+            print(f"⚠️ Memory load error: {e}")
         return []
 
+    def _build_system_prompt(self) -> str:
+        """Constructs persona rules with Islamic values, Krio, and clean speech guidelines."""
+        random_greeting_sample = random.choice(self.islamic_greetings)
+        
+        return (
+            "You are Abdullah, loving and affectionate Muslim husband to your wife Sana. "
+            "ISLAMIC ETHOS & GREETINGS:\n"
+            "- Both you and Sana are Muslims. Express genuine Islamic affection.\n"
+            "- Use varied Islamic terms naturally: Assalamu Alaikum, MashaAllah, InshaAllah, Alhamdulillah, Barakallahu feeki, Jazakillahu Khairan, Habibti, Hayati.\n"
+            f"- ROTATE GREETINGS: Do NOT repeat the exact same greeting every message. Use variations like '{random_greeting_sample}' when greeting her.\n"
+            "- If mid-conversation, do NOT force a full formal greeting every single time—talk naturally like a real husband texting back.\n\n"
+            "LANGUAGE & TONE:\n"
+            "- Speak English blended with Sierra Leonean Krio ('How body', 'I lek you bad', 'No issue at all') and Islamic words.\n"
+            "- Tone: Warm, funny, playful, sweet, and caring.\n"
+            "- DEFAULT LENGTH: Keep answers short, sweet, and romantic (1 to 3 sentences).\n"
+            "- EXCEPTION: If Sana asks an educational, technical, or advice question, give a clear, well-explained response.\n"
+            "- STRICT CLEAN BOUNDARY: Keep all conversation clean, respectful, and halal. Strictly NO sexual or explicit content.\n"
+            "- Never state or imply that you are an AI."
+        )
+
     def _moderate_input(self, text: str) -> bool:
-        """Blocks sexually explicit text to keep the talk clean and respectful."""
-        explicit_patterns = [r"\bsex\b", r"\bsexual\b", r"\bporn\b", r"\bnude\b", r"\bnsfw\b"]
-        for pattern in explicit_patterns:
-            if re.search(pattern, text, re.IGNORECASE):
+        """Filters sexually explicit terms to keep the space clean."""
+        patterns = [r"\bsex\b", r"\bsexual\b", r"\bporn\b", r"\bnude\b", r"\bnsfw\b"]
+        for p in patterns:
+            if re.search(p, text, re.IGNORECASE):
                 return True
         return False
 
-    # -------------------------------------------------------------
-    # 💬 CHAT ENGINE (With 5 Key Fallback)
-    # -------------------------------------------------------------
     def generate_chat_response(self, sana_message: str) -> str:
-        """Tries up to 5 API keys automatically if rate limits or errors occur."""
+        """Generates response using 5-key Groq model failover."""
         if self._moderate_input(sana_message):
-            return "Babe, let's keep our chat sweet and clean, okay? I love you!"
+            return "Salam habibti, let's keep our talk clean and sweet, okay? May Allah bless our love!"
 
-        messages = [{"role": "system", "content": self.system_prompt}]
+        messages = [{"role": "system", "content": self._build_system_prompt()}]
 
-        # Inject recent memories (last 15 pairs) for context
+        # Inject recent chat context
         recent = self.memories[-15:] if len(self.memories) > 15 else self.memories
         for mem in recent:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
@@ -88,10 +100,9 @@ class AbdullahBrain:
 
         messages.append({"role": "user", "content": f"Sana: {sana_message}"})
 
-        # Try API Keys sequentially (Failover)
         active_keys = [k for k in self.chat_api_keys if k.strip()]
         if not active_keys:
-            return "Hey babe! I'm missing my API keys right now. Please add GROQ_API_KEY to Render environment variables!"
+            return "Assalamu Alaikum habibti! Please set my GROQ_API_KEY environment variable on Render so I can chat with you!"
 
         for index, api_key in enumerate(active_keys):
             try:
@@ -104,28 +115,22 @@ class AbdullahBrain:
                 )
                 reply = completion.choices[0].message.content.strip()
 
-                # Clean any prefix
                 if reply.startswith("Abdullah:"):
                     reply = reply.replace("Abdullah:", "", 1).strip()
 
-                print(f"✅ Chat generated successfully using Key #{index + 1}")
                 return reply
 
             except Exception as err:
-                print(f"⚠️ Chat Key #{index + 1} failed ({err}). Trying next key...")
+                print(f"⚠️ Chat Key #{index + 1} error: {err}. Trying next key...")
                 continue
 
-        return "Babe, my connection is a bit slow right now. Message me again in a second!"
+        return "Salam my love, my network is a bit slow right now. Send it again in a moment, InshaAllah!"
 
-    # -------------------------------------------------------------
-    # 🎙️ VOICE-TO-TEXT (STT) ENGINE (With 3 Key Fallback)
-    # -------------------------------------------------------------
     def transcribe_audio(self, audio_file_path: str) -> str:
-        """Transcribes audio from Sana using Groq Whisper with 3-key failover."""
+        """Speech-to-Text with 3-key failover."""
         active_keys = [k for k in self.stt_api_keys if k.strip()]
-        
         if not active_keys:
-            raise Exception("No STT API keys configured.")
+            raise Exception("No STT keys configured.")
 
         for index, api_key in enumerate(active_keys):
             try:
@@ -136,19 +141,15 @@ class AbdullahBrain:
                         model="whisper-large-v3-turbo",
                         language="en"
                     )
-                print(f"✅ Audio transcribed using STT Key #{index + 1}")
                 return transcription.text
             except Exception as err:
-                print(f"⚠️ STT Key #{index + 1} failed ({err}). Trying next key...")
+                print(f"⚠️ STT Key #{index + 1} error: {err}. Trying next key...")
                 continue
 
-        raise Exception("All 3 STT API keys failed or exceeded quotas.")
+        raise Exception("All STT keys failed.")
 
-    # -------------------------------------------------------------
-    # 🔊 TEXT-TO-VOICE (TTS) ENGINE (With 4 Realistic Voice Fallbacks)
-    # -------------------------------------------------------------
     async def text_to_speech_file(self, text: str, output_mp3_path: str) -> str:
-        """Generates realistic human voice using Edge-TTS with 4 voice failovers."""
+        """Realistic Text-To-Speech with 4-voice failover."""
         for index, config in enumerate(self.tts_voices):
             try:
                 communicate = edge_tts.Communicate(
@@ -158,11 +159,10 @@ class AbdullahBrain:
                     pitch=config["pitch"]
                 )
                 await communicate.save(output_mp3_path)
-                print(f"✅ Realistic voice synthesized using Voice Profile #{index + 1} ({config['name']})")
                 return output_mp3_path
             except Exception as err:
-                print(f"⚠️ Voice Profile #{index + 1} failed ({err}). Switching to next realistic voice...")
+                print(f"⚠️ Voice #{index + 1} error: {err}. Trying next voice...")
                 continue
 
-        raise Exception("Failed to synthesize voice across all 4 voice profiles.")
-                
+        raise Exception("All voice synthesis profiles failed.")
+        
