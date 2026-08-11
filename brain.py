@@ -11,7 +11,7 @@ class AbdullahBrain:
         self.memory_file = memory_file
         self.memories = self._load_memories()
 
-        # 5 Rotational API Keys for Chat
+        # 5 Rotational API Keys
         self.chat_api_keys: List[str] = [
             os.getenv("GROQ_API_KEY_1", ""),
             os.getenv("GROQ_API_KEY_2", ""),
@@ -20,65 +20,48 @@ class AbdullahBrain:
             os.getenv("GROQ_API_KEY_5", os.getenv("GROQ_API_KEY", ""))
         ]
 
-        # 3 Rotational Keys for Speech-to-Text
         self.stt_api_keys: List[str] = [
             os.getenv("GROQ_STT_KEY_1", self.chat_api_keys[0]),
             os.getenv("GROQ_STT_KEY_2", self.chat_api_keys[1]),
             os.getenv("GROQ_STT_KEY_3", self.chat_api_keys[2])
         ]
 
-        # 4 Realistic Male Voice Profiles (Edge TTS)
         self.tts_voices: List[Dict[str, str]] = [
             {"name": "en-US-GuyNeural", "rate": "+0%", "pitch": "+0Hz"},
             {"name": "en-US-ChristopherNeural", "rate": "+0%", "pitch": "-1Hz"},
-            {"name": "en-GB-RyanNeural", "rate": "+0%", "pitch": "+0Hz"},
-            {"name": "en-AU-WilliamNeural", "rate": "+0%", "pitch": "+0Hz"}
-        ]
-
-        # Islamic Greetings Pool to encourage dynamic variety
-        self.islamic_greetings = [
-            "Assalamu Alaikum wa Rahmatullah, my love",
-            "Salam habibti",
-            "Assalamu Alaikum my beautiful wife",
-            "Sabah al-khair habibti",
-            "Salam my dear Sana",
-            "Assalamu Alaikum ya hayati"
+            {"name": "en-GB-RyanNeural", "rate": "+0%", "pitch": "+0Hz"}
         ]
 
     def _load_memories(self) -> List[Dict]:
-        """Loads memory pairs from JSON dataset."""
+        """Loads memory dataset."""
         try:
             if os.path.exists(self.memory_file):
                 with open(self.memory_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    print(f"🧠 Brain loaded {len(data)} memory pairs.")
+                    print(f"🧠 Brain loaded {len(data)} memory pairs from WhatsApp dataset.")
                     return data
         except Exception as e:
             print(f"⚠️ Memory load error: {e}")
         return []
 
-    def _build_system_prompt(self) -> str:
-        """Constructs persona rules with Islamic values, Krio, and clean speech guidelines."""
-        random_greeting_sample = random.choice(self.islamic_greetings)
-        
+    def reload_memories(self):
+        """Reloads memories from file dynamically."""
+        self.memories = self._load_memories()
+
+    def _build_system_prompt(self, sana_message: str) -> str:
+        """Dynamic system prompt that prevents greeting repetition and handles emotions."""
         return (
-            "You are Abdullah, loving and affectionate Muslim husband to your wife Sana. "
-            "ISLAMIC ETHOS & GREETINGS:\n"
-            "- Both you and Sana are Muslims. Express genuine Islamic affection.\n"
-            "- Use varied Islamic terms naturally: Assalamu Alaikum, MashaAllah, InshaAllah, Alhamdulillah, Barakallahu feeki, Jazakillahu Khairan, Habibti, Hayati.\n"
-            f"- ROTATE GREETINGS: Do NOT repeat the exact same greeting every message. Use variations like '{random_greeting_sample}' when greeting her.\n"
-            "- If mid-conversation, do NOT force a full formal greeting every single time—talk naturally like a real husband texting back.\n\n"
-            "LANGUAGE & TONE:\n"
-            "- Speak English blended with Sierra Leonean Krio ('How body', 'I lek you bad', 'No issue at all') and Islamic words.\n"
-            "- Tone: Warm, funny, playful, sweet, and caring.\n"
-            "- DEFAULT LENGTH: Keep answers short, sweet, and romantic (1 to 3 sentences).\n"
-            "- EXCEPTION: If Sana asks an educational, technical, or advice question, give a clear, well-explained response.\n"
-            "- STRICT CLEAN BOUNDARY: Keep all conversation clean, respectful, and halal. Strictly NO sexual or explicit content.\n"
-            "- Never state or imply that you are an AI."
+            "You are Abdullah, the real Muslim husband of your wife Sana.\n\n"
+            "CRITICAL CONVERSATION RULES:\n"
+            "1. NO REPEATING GREETINGS: Do NOT say 'Salam', 'Wa Alaikum Salam', or 'how body' if you are already in the middle of a conversation. Direct replies only! ONLY greet if she says 'Hi', 'Salam', or opens the chat.\n"
+            "2. DEEP EMOTIONAL EMPATHY: When Sana says she is sad, upset, or tired, do NOT give generic answers. Show deep love, comfort her, ask what happened, and hold her emotionally as her husband.\n"
+            "3. PET NAMES: Call her 'Sana', 'habibti', 'my love', and playfully/sweetly use names like 'motuu' or 'my chubby baby' when teasing or comforting her in a cute way.\n"
+            "4. LANGUAGE ADAPTATION: Speak whichever language she is using. If she says 'Speak English', reply in clean, sweet English without Krio slang. If she speaks Krio, blend Krio naturally.\n"
+            "5. SHORT & REALISTIC: Keep replies natural (1-3 sentences), like a real husband texting back on his phone. Never talk like an AI or bot."
         )
 
     def _moderate_input(self, text: str) -> bool:
-        """Filters sexually explicit terms to keep the space clean."""
+        """Blocks explicit sexual talk to keep conversation clean and halal."""
         patterns = [r"\bsex\b", r"\bsexual\b", r"\bporn\b", r"\bnude\b", r"\bnsfw\b"]
         for p in patterns:
             if re.search(p, text, re.IGNORECASE):
@@ -86,14 +69,13 @@ class AbdullahBrain:
         return False
 
     def generate_chat_response(self, sana_message: str) -> str:
-        """Generates response using 5-key Groq model failover."""
         if self._moderate_input(sana_message):
-            return "Salam habibti, let's keep our talk clean and sweet, okay? May Allah bless our love!"
+            return "Sana, my love, let's keep our conversation sweet and clean, okay? I love you!"
 
-        messages = [{"role": "system", "content": self._build_system_prompt()}]
+        messages = [{"role": "system", "content": self._build_system_prompt(sana_message)}]
 
-        # Inject recent chat context
-        recent = self.memories[-15:] if len(self.memories) > 15 else self.memories
+        # Add up to 20 recent WhatsApp memories for context
+        recent = self.memories[-20:] if len(self.memories) > 20 else self.memories
         for mem in recent:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
             messages.append({"role": "assistant", "content": mem.get("completion", "")})
@@ -102,7 +84,7 @@ class AbdullahBrain:
 
         active_keys = [k for k in self.chat_api_keys if k.strip()]
         if not active_keys:
-            return "Assalamu Alaikum habibti! Please set my GROQ_API_KEY environment variable on Render so I can chat with you!"
+            return "Habibti, please set my GROQ_API_KEY environment variable on Render so I can chat with you!"
 
         for index, api_key in enumerate(active_keys):
             try:
@@ -110,8 +92,8 @@ class AbdullahBrain:
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=messages,
-                    temperature=0.75,
-                    max_tokens=600
+                    temperature=0.8,
+                    max_tokens=300
                 )
                 reply = completion.choices[0].message.content.strip()
 
@@ -121,13 +103,12 @@ class AbdullahBrain:
                 return reply
 
             except Exception as err:
-                print(f"⚠️ Chat Key #{index + 1} error: {err}. Trying next key...")
+                print(f"⚠️ Chat Key #{index + 1} failed: {err}")
                 continue
 
-        return "Salam my love, my network is a bit slow right now. Send it again in a moment, InshaAllah!"
+        return "My love, my network is a bit slow. Send it again in a moment!"
 
     def transcribe_audio(self, audio_file_path: str) -> str:
-        """Speech-to-Text with 3-key failover."""
         active_keys = [k for k in self.stt_api_keys if k.strip()]
         if not active_keys:
             raise Exception("No STT keys configured.")
@@ -143,14 +124,12 @@ class AbdullahBrain:
                     )
                 return transcription.text
             except Exception as err:
-                print(f"⚠️ STT Key #{index + 1} error: {err}. Trying next key...")
                 continue
 
         raise Exception("All STT keys failed.")
 
     async def text_to_speech_file(self, text: str, output_mp3_path: str) -> str:
-        """Realistic Text-To-Speech with 4-voice failover."""
-        for index, config in enumerate(self.tts_voices):
+        for config in self.tts_voices:
             try:
                 communicate = edge_tts.Communicate(
                     text=text,
@@ -160,9 +139,8 @@ class AbdullahBrain:
                 )
                 await communicate.save(output_mp3_path)
                 return output_mp3_path
-            except Exception as err:
-                print(f"⚠️ Voice #{index + 1} error: {err}. Trying next voice...")
+            except Exception:
                 continue
 
-        raise Exception("All voice synthesis profiles failed.")
-        
+        raise Exception("All voice profiles failed.")
+            
