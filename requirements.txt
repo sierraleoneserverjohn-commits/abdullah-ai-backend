@@ -1,4 +1,6 @@
 fastapi
 uvicorn
-openai
+groq
+edge-tts
 pydantic
+python-multipart
