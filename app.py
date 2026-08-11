@@ -2,7 +2,6 @@ import os
 import tempfile
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from brain import AbdullahBrain
 from upload_whatsapp import parse_whatsapp_chat
@@ -17,13 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. Parse WhatsApp Chat File
 print("⚡ Auto-parsing WhatsApp Chat...")
 parse_whatsapp_chat()
 
-# 2. Instantiate Brain & Load Memories
 brain = AbdullahBrain()
-brain.reload_memories()
 
 class ChatPayload(BaseModel):
     message: str
@@ -33,7 +29,8 @@ def home():
     return {
         "status": "online",
         "system": "Abdullah AI Brain Active",
-        "memories_loaded": len(brain.memories)
+        "base_memories": len(brain.base_memories),
+        "live_learning_score": brain.get_learning_progress()
     }
 
 @app.post("/chat")
@@ -42,42 +39,12 @@ async def chat_endpoint(payload: ChatPayload):
     if not sana_text:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    reply = brain.generate_chat_response(sana_text)
-    return {"response": reply}
-
-@app.post("/transcribe")
-async def transcribe_endpoint(file: UploadFile = File(...)):
-    if not file:
-        raise HTTPException(status_code=400, detail="Audio file required.")
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(await file.read())
-        temp_audio_path = temp_audio.name
-
-    try:
-        text = brain.transcribe_audio(temp_audio_path)
-        return {"transcription": text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
-
-@app.post("/speak")
-async def speak_endpoint(payload: ChatPayload):
-    text = payload.message.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Text cannot be empty.")
-
-    output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-
-    try:
-        await brain.text_to_speech_file(text, output_path)
-        return FileResponse(
-            path=output_path,
-            media_type="audio/mpeg",
-            filename="abdullah_voice.mp3"
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Voice synthesis error: {str(e)}")
-        
+    # Get reply and tokens from brain
+    result = brain.generate_chat_response(sana_text)
+    
+    return {
+        "response": result["reply"],
+        "tokens_used": result["tokens"],
+        "learning_progress": brain.get_learning_progress()
+    }
+    
