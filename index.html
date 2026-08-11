@@ -3,371 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Abdullah AI — Brain Control Dashboard</title>
+    <title>Abdullah AI - Sana's Husband</title>
     <style>
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-blue: #3b82f6;
-            --text-main: #f8fafc;
-            --text-sub: #94a3b8;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 600px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        /* Dual Avatar Header */
-        .header {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 16px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-
-        .avatar-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .avatar {
-            width: 65px;
-            height: 65px;
-            border-radius: 50%;
-            border: 3px solid var(--accent-blue);
-            background: #334155;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }
-
-        .avatar-overlap {
-            margin-left: -20px;
-            border-color: #ec4899;
-        }
-
-        h1 { margin: 0; font-size: 1.4rem; color: var(--text-main); }
-        p.subtitle { margin: 4px 0 0; font-size: 0.85rem; color: var(--text-sub); }
-
-        /* Server Status & Metrics Grid */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
-
-        .metric-card {
-            background: var(--card-bg);
-            padding: 14px;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .metric-title { font-size: 0.75rem; color: var(--text-sub); text-transform: uppercase; }
-        .metric-value { font-size: 1.1rem; font-weight: bold; }
-
-        /* API Endpoint Status List */
-        .status-card {
-            background: var(--card-bg);
-            padding: 16px;
-            border-radius: 16px;
-        }
-
-        .status-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .status-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .status-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 12px;
-            background: #0f172a;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-
-        .badge {
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: bold;
-        }
-
-        .badge-checking { background: #334155; color: #cbd5e1; }
-        .badge-active { background: #064e3b; color: var(--accent-green); }
-        .badge-offline { background: #7f1d1d; color: var(--accent-red); }
-
-        /* Interactive Terminal / Chat Console */
-        .console-card {
-            background: var(--card-bg);
-            padding: 16px;
-            border-radius: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .chat-box {
-            height: 200px;
-            background: #0f172a;
-            border-radius: 8px;
-            padding: 12px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            font-size: 0.9rem;
-        }
-
-        .msg { padding: 8px 12px; border-radius: 8px; max-width: 80%; }
-        .msg-sana { background: #0284c7; align-self: flex-end; }
-        .msg-abdullah { background: #334155; align-self: flex-start; }
-
-        .input-group {
-            display: flex;
-            gap: 8px;
-        }
-
-        input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: var(--text-main);
-            outline: none;
-        }
-
-        button {
-            padding: 10px 16px;
-            border-radius: 8px;
-            border: none;
-            background: var(--accent-blue);
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        button:active { opacity: 0.8; }
-        .btn-check { background: #6366f1; width: 100%; margin-top: 8px; }
+        body { background-color: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-box { background: #334155; padding: 15px; border-radius: 8px; text-align: center; }
+        .token-text { color: #10b981; font-weight: bold; font-size: 1.2rem; }
+        
+        /* Learning Progress Bar */
+        .progress-container { width: 100%; background: #475569; border-radius: 8px; margin-top: 10px; overflow: hidden; }
+        .progress-bar { height: 10px; background: #3b82f6; width: 0%; transition: width 0.5s ease-in-out; }
+        
+        .chat-box { height: 300px; overflow-y: auto; background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #334155; }
+        .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 80%; }
+        .sana { background: #3b82f6; margin-left: auto; text-align: right; }
+        .abdullah { background: #475569; margin-right: auto; }
+        
+        input { width: calc(100% - 90px); padding: 10px; border-radius: 5px; border: none; }
+        button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="container">
+    <h2>Abdullah AI Control Panel</h2>
 
-    <!-- Dual Avatar Header -->
-    <div class="header">
-        <div class="avatar-container">
-            <div class="avatar">👨🏾‍💻</div>
-            <div class="avatar avatar-overlap">🧕🏽</div>
+    <div class="stats-grid">
+        <div class="stat-box">
+            <h3>Session Tokens Used</h3>
+            <p class="token-text" id="token-counter">0</p>
+            <small>Max Limit: 6,000 / minute (Free)</small>
         </div>
-        <h1>Abdullah & Sana AI Engine</h1>
-        <p class="subtitle">System Monitor & Token Tracker</p>
-    </div>
-
-    <!-- Live Metrics Grid -->
-    <div class="metrics-grid">
-        <div class="metric-card">
-            <span class="metric-title">Server Connection</span>
-            <span class="metric-value" id="server-status" style="color: var(--text-sub);">Checking...</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric-title">Memories Loaded</span>
-            <span class="metric-value" id="memory-count">0 Pairs</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric-title">Session Tokens Used</span>
-            <span class="metric-value" id="token-count" style="color: var(--accent-green);">0 tokens</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric-title">Est. Cost (Groq Free)</span>
-            <span class="metric-value" style="color: var(--accent-blue);">$0.00</span>
+        <div class="stat-box">
+            <h3>Live Learning with Sana</h3>
+            <p id="learning-text" style="font-weight: bold; color: #3b82f6;">0%</p>
+            <div class="progress-container">
+                <div class="progress-bar" id="learning-bar"></div>
+            </div>
         </div>
     </div>
 
-    <!-- API Pathway Status -->
-    <div class="status-card">
-        <div class="status-header">
-            <strong>API Endpoint Diagnostics</strong>
-        </div>
-        <div class="status-list">
-            <div class="status-item">
-                <span>💬 Chat Engine (/chat)</span>
-                <span id="status-chat" class="badge badge-checking">Testing...</span>
-            </div>
-            <div class="status-item">
-                <span>🎙️ Voice-to-Text (/transcribe)</span>
-                <span id="status-stt" class="badge badge-checking">Testing...</span>
-            </div>
-            <div class="status-item">
-                <span>🔊 Text-to-Voice (/speak)</span>
-                <span id="status-tts" class="badge badge-checking">Testing...</span>
-            </div>
-        </div>
-        <button class="btn-check" onclick="runDiagnostics()">Re-Run Health Check</button>
-    </div>
-
-    <!-- Interactive Console Tester -->
-    <div class="console-card">
-        <strong>Live Brain Simulator</strong>
-        <div class="chat-box" id="chat-box">
-            <div class="msg msg-abdullah">Assalamu Alaikum habibti! Testing terminal interface...</div>
-        </div>
-        <div class="input-group">
-            <input type="text" id="user-input" placeholder="Type a message as Sana..." onkeypress="handleKeyPress(event)">
+    <div class="card">
+        <h3>Live Chat Simulator</h3>
+        <div class="chat-box" id="chatbox"></div>
+        <div>
+            <input type="text" id="userInput" placeholder="Type a message as Sana...">
             <button onclick="sendMessage()">Send</button>
         </div>
     </div>
 
-</div>
+    <script>
+        let totalTokens = 0;
+        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; // Change to your Render URL
 
-<script>
-    // Set your Render Backend URL here
-    const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; 
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const chatbox = document.getElementById('chatbox');
+            const text = input.value.trim();
+            if (!text) return;
 
-    let totalTokens = 0;
+            // Add Sana's message
+            chatbox.innerHTML += `<div class="msg sana">${text}</div>`;
+            input.value = '';
+            chatbox.scrollTop = chatbox.scrollHeight;
 
-    // Helper: Estimate tokens roughly (1 word ≈ 1.3 tokens)
-    function estimateTokens(text) {
-        const words = text.trim().split(/\s+/).length;
-        return Math.ceil(words * 1.33);
-    }
-
-    function updateTokenTracker(inputMsg, responseMsg) {
-        const tokensIn = estimateTokens(inputMsg);
-        const tokensOut = estimateTokens(responseMsg);
-        totalTokens += (tokensIn + tokensOut);
-        document.getElementById("token-count").innerText = `${totalTokens} tokens`;
-    }
-
-    // Health Check Function
-    async function runDiagnostics() {
-        const statusServer = document.getElementById("server-status");
-        const statusChat = document.getElementById("status-chat");
-        const statusStt = document.getElementById("status-stt");
-        const statusTts = document.getElementById("status-tts");
-        const memoryCount = document.getElementById("memory-count");
-
-        statusServer.innerText = "Connecting...";
-        statusServer.style.color = "var(--text-sub)";
-
-        // 1. Check Root Endpoint
-        try {
-            const res = await fetch(`${BACKEND_URL}/`);
-            if (res.ok) {
-                const data = await res.json();
-                statusServer.innerText = "ONLINE";
-                statusServer.style.color = "var(--accent-green)";
-                memoryCount.innerText = `${data.memories_loaded || 0} Pairs`;
+            try {
+                const response = await fetch(`${BACKEND_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
                 
-                statusChat.className = "badge badge-active";
-                statusChat.innerText = "WORKING";
-            } else {
-                throw new Error();
+                const data = await response.json();
+                
+                // Add Abdullah's response
+                chatbox.innerHTML += `<div class="msg abdullah">${data.response}</div>`;
+                chatbox.scrollTop = chatbox.scrollHeight;
+
+                // Update Tokens
+                totalTokens += data.tokens_used;
+                document.getElementById('token-counter').innerText = totalTokens;
+
+                // Update Learning Progress
+                const progress = data.learning_progress;
+                document.getElementById('learning-text').innerText = `${progress}%`;
+                document.getElementById('learning-bar').style.width = `${progress}%`;
+
+            } catch (error) {
+                chatbox.innerHTML += `<div class="msg abdullah" style="color:red;">Network Error. Is Render awake?</div>`;
             }
-        } catch {
-            statusServer.innerText = "OFFLINE";
-            statusServer.style.color = "var(--accent-red)";
-            statusChat.className = "badge badge-offline";
-            statusChat.innerText = "FAILED";
         }
-
-        // 2. STT Check (Static confirmation)
-        statusStt.className = "badge badge-active";
-        statusStt.innerText = "READY";
-
-        // 3. TTS Check (Static confirmation)
-        statusTts.className = "badge badge-active";
-        statusTts.innerText = "READY";
-    }
-
-    // Interactive Chat Simulation
-    async function sendMessage() {
-        const inputField = document.getElementById("user-input");
-        const message = inputField.value.trim();
-        if (!message) return;
-
-        const chatBox = document.getElementById("chat-box");
-
-        // Display Sana's Message
-        const sanaMsgElem = document.createElement("div");
-        sanaMsgElem.className = "msg msg-sana";
-        sanaMsgElem.innerText = message;
-        chatBox.appendChild(sanaMsgElem);
-        inputField.value = "";
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-        try {
-            const response = await fetch(`${BACKEND_URL}/chat`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: message })
-            });
-
-            const data = await response.json();
-            const reply = data.response || "No response received.";
-
-            // Display Abdullah's Reply
-            const abdullahMsgElem = document.createElement("div");
-            abdullahMsgElem.className = "msg msg-abdullah";
-            abdullahMsgElem.innerText = reply;
-            chatBox.appendChild(abdullahMsgElem);
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            // Track Token Consumption
-            updateTokenTracker(message, reply);
-
-        } catch (err) {
-            const errorElem = document.createElement("div");
-            errorElem.className = "msg msg-abdullah";
-            errorElem.style.background = "#7f1d1d";
-            errorElem.innerText = "⚠️ Error connecting to Abdullah AI backend.";
-            chatBox.appendChild(errorElem);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-    }
-
-    function handleKeyPress(e) {
-        if (e.key === "Enter") sendMessage();
-    }
-
-    // Run diagnostics on load
-    window.onload = runDiagnostics;
-</script>
-
+    </script>
 </body>
 </html>
