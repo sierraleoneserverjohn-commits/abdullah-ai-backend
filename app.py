@@ -9,7 +9,6 @@ from upload_whatsapp import parse_whatsapp_chat
 
 app = FastAPI(title="Abdullah AI Backend Server")
 
-# Enable CORS for phone and web clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,12 +17,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Automatically generate memory JSON from WhatsApp file if dataset doesn't exist
-if not os.path.exists("abdullah_memory_dataset.json"):
-    print("⚡ Auto-parsing WhatsApp chat on startup...")
-    parse_whatsapp_chat()
+# 1. Parse WhatsApp Chat File
+print("⚡ Auto-parsing WhatsApp Chat...")
+parse_whatsapp_chat()
 
+# 2. Instantiate Brain & Load Memories
 brain = AbdullahBrain()
+brain.reload_memories()
 
 class ChatPayload(BaseModel):
     message: str
@@ -32,7 +32,7 @@ class ChatPayload(BaseModel):
 def home():
     return {
         "status": "online",
-        "system": "Abdullah AI Brain Online",
+        "system": "Abdullah AI Brain Active",
         "memories_loaded": len(brain.memories)
     }
 
