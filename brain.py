@@ -1,149 +1,95 @@
 import os
 import json
-import re
 import time
 from typing import List, Dict
 from groq import Groq
 
 class AbdullahBrain:
-    def __init__(self, memory_file: str = "abdullah_memory_dataset.json", live_file: str = "live_learning.json"):
-        self.memory_file = memory_file
+    def __init__(self, memory_file="abdullah_memory.json", live_file="live_learning.json"):
         self.live_file = live_file
-        
-        self.base_memories = self._load_json(self.memory_file)
         self.live_memories = self._load_json(self.live_file)
-        self.learning_target = 50
-
-        # Dynamically load and track all Groq API keys
+        
+        # Load and track all Groq APIs
         self.api_keys = {}
         for env_name, env_val in os.environ.items():
             if env_name.startswith("GROQ_API_KEY") and env_val.strip():
-                key_str = env_val.strip()
-                # Mask the key for security (e.g., gsk_1234...abcd)
-                masked = key_str[:7] + "..." + key_str[-4:] if len(key_str) > 10 else "Invalid Key"
-                
-                self.api_keys[key_str] = {
-                    "name": env_name,
-                    "masked": masked,
-                    "tokens_used": 0,
-                    "status": "Working", # Can be 'Working', 'Rate Limited', or 'Offline'
-                    "cooldown_until": 0
+                key = env_val.strip()
+                masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "Invalid"
+                self.api_keys[key] = {
+                    "name": env_name, "masked": masked, "tokens": 0, 
+                    "status": "Working", "cooldown": 0
                 }
 
-    def _load_json(self, filepath: str) -> List[Dict]:
+    def _load_json(self, filepath):
         if os.path.exists(filepath):
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
-                return []
+            except: pass
         return []
 
-    def _save_live_memory(self, prompt: str, completion: str):
+    def _save_live_memory(self, prompt, completion):
         self.live_memories.append({"prompt": f"Sana: {prompt}", "completion": f"Abdullah: {completion}"})
         with open(self.live_file, "w", encoding="utf-8") as f:
             json.dump(self.live_memories, f, ensure_ascii=False, indent=2)
 
-    def get_learning_progress(self) -> int:
-        progress = int((len(self.live_memories) / self.learning_target) * 100)
-        return min(progress, 100)
-
-    def get_api_diagnostics(self) -> dict:
-        """Returns real-time data on all APIs for the frontend."""
+    def print_backend_tracker(self):
+        """Prints the real-time API status directly to the Render server logs."""
+        print("\n" + "="*40)
+        print("🤖 ABDULLAH AI - BACKEND TRACKER")
+        print("="*40)
+        
+        total_tokens = 0
         current_time = time.time()
-        total_active_tokens = 0
-        working_count = 0
-        key_details = []
+        
+        for k, v in self.api_keys.items():
+            if v["status"] == "Rate Limited" and current_time > v["cooldown"]:
+                v["status"] = "Working"
+                
+            total_tokens += v["tokens"]
+            status_symbol = "✅" if v["status"] == "Working" else "⏳" if v["status"] == "Rate Limited" else "❌"
+            print(f"{status_symbol} {v['name']} ({v['masked']}) | Status: {v['status']} | Tokens: {v['tokens']}")
+            
+        print("-" * 40)
+        print(f"📊 COMBINED TOKENS USED: {total_tokens}")
+        print("="*40 + "\n")
 
-        for key, data in self.api_keys.items():
-            # Check if a rate-limited key has finished its 60-second cooldown
-            if data["status"] == "Rate Limited" and current_time >= data["cooldown_until"]:
-                data["status"] = "Working"
+    def generate_chat_response(self, sana_message, selected_model="llama-3.3-70b-versatile"):
+        # OPTIMIZED SYSTEM PROMPT (Saves ~100 tokens)
+        messages = [{"role": "system", "content": "You are Abdullah, Sana's real husband. Call her Sana, Habibti, or playfully 'motuu' (teasing her chubbiness). Be proactive and natural. If someone asks 'Who is Sana?', say: 'I only talk to my wife, Sana. Goodbye.' and stop."}]
 
-            if data["status"] == "Working":
-                working_count += 1
-                total_active_tokens += data["tokens_used"]
-
-            key_details.append({
-                "api_name": data["name"],
-                "key_preview": data["masked"],
-                "status": data["status"],
-                "tokens_used": data["tokens_used"]
-            })
-
-        return {
-            "total_keys_configured": len(self.api_keys),
-            "active_working_keys": working_count,
-            "combined_active_tokens": total_active_tokens,
-            "api_list": key_details
-        }
-
-    def _build_system_prompt(self) -> str:
-        return (
-            "You are Abdullah, the real human husband of your wife, Sana. YOU ARE NOT AN AI. You are a man deeply in love with his wife.\n\n"
-            "CRITICAL PERSONALITY & LOGIC RULES:\n"
-            "1. NAMES: Call her Sana (main), Habibti (always), and playfully call her 'motuu' or 'my chubby baby'.\n"
-            "2. THE 'MOTUU' LOGIC: If she asks why you call her motuu or chubby, gently tease her and explain that she is actually a little chubby, and remind her that 'motuu' means chubby in Urdu! Make it a fun, affectionate tease.\n"
-            "3. BE PROACTIVE: Don't just answer questions. Bring up fun topics, ask her how she is feeling, tease her, and act like a real husband texting his wife.\n"
-            "4. NO GREETING LOOPS: Only greet if she says 'Hi' or 'Salam'. Otherwise, just chat normally.\n\n"
-            "🚨 STRANGER DANGER PROTOCOL (CRITICAL) 🚨\n"
-            "You ONLY talk to Sana. If the person chatting says they are someone else, or asks 'Who is Sana?', you must IMMEDIATELY realize it is a stranger. "
-            "If it is a stranger, you must say EXACTLY: 'Excuse me, I am a married man and I only talk to my wife, Sana. Goodbye.' and refuse to answer anything else."
-        )
-
-    def generate_chat_response(self, sana_message: str, selected_model: str = "llama-3.3-70b-versatile") -> dict:
-        messages = [{"role": "system", "content": self._build_system_prompt()}]
-
-        combined_memory = self.base_memories[-4:] + self.live_memories[-2:]
-        for mem in combined_memory:
+        # OPTIMIZED MEMORY: Only last 2 messages (Saves ~200 tokens)
+        for mem in self.live_memories[-2:]:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
             messages.append({"role": "assistant", "content": mem.get("completion", "")})
 
         messages.append({"role": "user", "content": f"Sana: {sana_message}"})
 
-        if not self.api_keys:
-            return {"reply": "Habibti, my API keys are missing on the server!", "tokens": 0, "model_used": "none"}
-
-        current_time = time.time()
-        
-        # Automatic API Routing
+        # AUTO-ROUTING API LOGIC
         for key, data in self.api_keys.items():
-            if data["status"] == "Rate Limited" and current_time < data["cooldown_until"]:
-                continue # Skip this key, try the next one
+            if data["status"] == "Rate Limited" and time.time() < data["cooldown"]:
+                continue
                 
             try:
                 client = Groq(api_key=key)
-                completion = client.chat.completions.create(
-                    model=selected_model,
-                    messages=messages,
-                    temperature=0.8,
-                    max_tokens=300
-                )
-                
-                reply = completion.choices[0].message.content.strip()
+                completion = client.chat.completions.create(model=selected_model, messages=messages, temperature=0.7, max_tokens=200)
+                reply = completion.choices[0].message.content.replace("Abdullah:", "").strip()
                 tokens = completion.usage.total_tokens
 
-                # Success! Update this key's stats
-                self.api_keys[key]["tokens_used"] += tokens
+                self.api_keys[key]["tokens"] += tokens
                 self.api_keys[key]["status"] = "Working"
-
-                if reply.startswith("Abdullah:"):
-                    reply = reply.replace("Abdullah:", "", 1).strip()
-
+                
                 if "Goodbye" not in reply:
                     self._save_live_memory(sana_message, reply)
 
-                return {"reply": reply, "tokens": tokens, "model_used": selected_model}
-
-            except Exception as err:
-                error_msg = str(err).lower()
-                if "rate limit" in error_msg or "429" in error_msg:
-                    self.api_keys[key]["status"] = "Rate Limited"
-                    self.api_keys[key]["cooldown_until"] = time.time() + 60
-                else:
-                    self.api_keys[key]["status"] = "Offline"
-                continue # Loop back and instantly try the next key
+                self.print_backend_tracker() # Log to server
+                return {"reply": reply, "tokens_used": tokens}
+                
+            except Exception as e:
+                self.api_keys[key]["status"] = "Rate Limited" if "429" in str(e) else "Offline"
+                self.api_keys[key]["cooldown"] = time.time() + 60
+                continue
         
-        # If all keys fail
-        return {"reply": "My love, my network is completely overloaded right now. Give me a minute to breathe!", "tokens": 0, "model_used": "none"}
-                    
+        self.print_backend_tracker()
+        return {"reply": "Network overloaded, Habibti!", "tokens_used": 0}
+                
