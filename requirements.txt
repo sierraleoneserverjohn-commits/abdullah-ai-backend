@@ -5,3 +5,5 @@ groq
 google-generativeai
 sqlalchemy
 psycopg2-binary
+psycopg2-binary
+python-multipart
