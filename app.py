@@ -1,6 +1,5 @@
 import os
-import tempfile
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from brain import AbdullahBrain
@@ -16,21 +15,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("⚡ Auto-parsing WhatsApp Chat...")
+print("⚡ Checking memory files...")
 parse_whatsapp_chat()
 
 brain = AbdullahBrain()
 
 class ChatPayload(BaseModel):
     message: str
+    model: str = "llama-3.3-70b-versatile" # Receives model choice from frontend
 
 @app.get("/")
 def home():
+    diagnostics = brain.get_api_diagnostics()
     return {
         "status": "online",
         "system": "Abdullah AI Brain Active",
-        "base_memories": len(brain.base_memories),
-        "live_learning_score": brain.get_learning_progress()
+        "learning_score": brain.get_learning_progress(),
+        "api_diagnostics": diagnostics
     }
 
 @app.post("/chat")
@@ -39,12 +40,17 @@ async def chat_endpoint(payload: ChatPayload):
     if not sana_text:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    # Get reply and tokens from brain
-    result = brain.generate_chat_response(sana_text)
+    # Pass the message and the requested model to the brain
+    result = brain.generate_chat_response(sana_text, payload.model)
+    
+    # Get fresh diagnostics after the chat
+    diagnostics = brain.get_api_diagnostics()
     
     return {
         "response": result["reply"],
-        "tokens_used": result["tokens"],
-        "learning_progress": brain.get_learning_progress()
-    }
+        "tokens_used_this_msg": result["tokens"],
+        "model_used": result["model_used"],
+        "learning_progress": brain.get_learning_progress(),
+        "api_diagnostics": diagnostics
+        }
     
