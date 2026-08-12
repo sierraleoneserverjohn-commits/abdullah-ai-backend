@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("⚡ Starting Abdullah Backend...")
+print("⚡ Running startup tasks...")
 parse_whatsapp_chat()
 
 brain = AbdullahBrain()
@@ -24,7 +24,11 @@ class ChatPayload(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "online", "system": "Abdullah AI Brain Active"}
+    return {
+        "status": "online",
+        "system": "Abdullah AI Brain Active",
+        "learning_score": brain.get_learning_progress()
+    }
 
 @app.post("/chat")
 async def chat_endpoint(payload: ChatPayload):
@@ -32,12 +36,11 @@ async def chat_endpoint(payload: ChatPayload):
     if not sana_text:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    # Generate response
     result = brain.generate_chat_response(sana_text)
     
     return {
         "response": result["reply"],
-        "tokens_used": result["tokens_used"],
+        "tokens_used": result["tokens"],
         "learning_progress": brain.get_learning_progress()
     }
     
