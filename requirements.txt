@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-groq
-edge-tts
 pydantic
-python-multipart
+groq
+google-generativeai
