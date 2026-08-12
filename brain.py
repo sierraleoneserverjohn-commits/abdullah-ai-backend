@@ -12,42 +12,42 @@ class AbdullahBrain:
         
         self.base_memories = self._load_json(self.memory_file)
         self.live_memories = self._load_json(self.live_file)
-        self.learning_target = 50
 
-        # Map API keys/indices to their specific models
+        # Hardcode the 5 slots so they always appear on the frontend
+        self.api_slots = [
+            {"id": "API_1", "env": "GROQ_API_KEY_1", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
+            {"id": "API_2", "env": "GROQ_API_KEY_2", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
+            {"id": "API_3", "env": "GEMINI_API_KEY_1", "provider": "Gemini", "model": "gemini-2.5-flash", "limit": 1500000},
+            {"id": "API_4", "env": "GEMINI_API_KEY_2", "provider": "Gemini", "model": "gemini-2.5-flash-lite", "limit": 1500000},
+            {"id": "API_5", "env": "GEMINI_API_KEY_3", "provider": "Gemini", "model": "gemini-1.5-pro", "limit": 1500000}
+        ]
+        
         self.api_pool = []
-        self._load_keys()
+        self._initialize_slots()
 
-    def _load_keys(self):
-        """Scans environment variables and maps all available APIs."""
-        for env_name, env_val in os.environ.items():
-            key = env_val.strip()
-            if not key:
-                continue
-                
-            provider = "Unknown"
-            model_name = "unknown-model"
-            daily_limit = 10000
+    def _initialize_slots(self):
+        """Builds the 5 slots and checks if you have added the keys yet."""
+        for slot in self.api_slots:
+            key = os.getenv(slot["env"], "").strip()
+            
+            if key:
+                status = "Connected & Active"
+                masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "Valid Key"
+            else:
+                key = None
+                status = "Awaiting API Key"
+                masked = "Pending..."
 
-            if "GROQ" in env_name:
-                provider = "Groq"
-                model_name = "llama-3.1-8b-instant"
-                daily_limit = 14400
-            elif "GEMINI" in env_name:
-                provider = "Gemini"
-                model_name = "gemini-2.5-flash"
-                daily_limit = 1500000
-
-            masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "Invalid"
             self.api_pool.append({
-                "id": env_name, # e.g. GROQ_API_KEY_1, GEMINI_API_KEY_2
-                ,
-                "provider": provider,
-                "model": model_name,
+                "id": slot["id"],
+                "env_name": slot["env"],
+                "key": key,
+                "provider": slot["provider"],
+                "model": slot["model"],
                 "masked": masked,
                 "tokens_used": 0,
-                "daily_limit": daily_limit,
-                "status": "Connected & Active",
+                "daily_limit": slot["limit"],
+                "status": status,
                 "cooldown": 0
             })
 
@@ -73,16 +73,19 @@ class AbdullahBrain:
         api_details = []
 
         for api in self.api_pool:
+            # Auto-recover APIs that finished their 60-second cooldown timeout
             if api["status"] == "Rate Limited" and current_time > api["cooldown"]:
                 api["status"] = "Connected & Active"
                 
             total_used += api["tokens_used"]
             total_capacity += api["daily_limit"]
+            
             if api["status"] == "Connected & Active":
                 connected_count += 1
                 
             api_details.append({
                 "id": api["id"],
+                "env_name": api["env_name"],
                 "provider": api["provider"],
                 "status": api["status"],
                 "tokens_used": api["tokens_used"],
@@ -90,8 +93,7 @@ class AbdullahBrain:
             })
 
         return {
-            "backend_connected": True,
-            "total_apis": len(self.api_pool),
+            "total_apis": 5,
             "connected_apis": connected_count,
             "combined_tokens_used": total_used,
             "combined_tokens_remaining": total_capacity - total_used,
@@ -99,6 +101,9 @@ class AbdullahBrain:
         }
 
     def _execute_api_call(self, api, messages):
+        if not api["key"]:
+            raise Exception("Key missing. Add to Render.")
+
         if api["provider"] == "Groq":
             client = Groq(api_key=api["key"])
             completion = client.chat.completions.create(
@@ -131,15 +136,14 @@ class AbdullahBrain:
 
         messages.append({"role": "user", "content": f"Sana: {sana_message}"})
 
-        if not self.api_pool:
-            return {"reply": "Habibti, no APIs configured!", "tokens": 0, "provider": "None"}
-
         current_time = time.time()
 
-        # CASE 1: User chose a specific API manually from the frontend dropdown
+        # MANUAL OVERRIDE MODE
         if selected_api != "auto":
             target = next((api for api in self.api_pool if api["id"] == selected_api), None)
             if target:
+                if target["status"] == "Awaiting API Key":
+                    return {"reply": f"Habibti, {selected_api} has no key added yet!", "tokens": 0, "provider": selected_api}
                 try:
                     reply, tokens = self._execute_api_call(target, messages)
                     target["tokens_used"] += tokens
@@ -148,19 +152,17 @@ class AbdullahBrain:
                         self._save_live_memory(sana_message, reply)
                     return {"reply": reply, "tokens": tokens, "provider": f"{target['id']} ({target['provider']})"}
                 except Exception as e:
-                    target["status"] = "Failed / Rate Limited"
-                    return {"reply": f"Selected API ({selected_api}) failed: {str(e)}", "tokens": 0, "provider": selected_api}
+                    return {"reply": f"Selected API failed: {str(e)}", "tokens": 0, "provider": selected_api}
 
-        # CASE 2: Auto Mode (Iterates through available active APIs with automatic failover)
+        # AUTO-SWITCH / FAILOVER MODE
         for api in self.api_pool:
-            if api["status"] == "Rate Limited" and current_time < api["cooldown"]:
-                continue
+            if api["status"] != "Connected & Active":
+                continue # Skip APIs that are missing keys, offline, or rate-limited
 
             try:
                 reply, tokens = self._execute_api_call(api, messages)
                 api["tokens_used"] += tokens
-                api["status"] = "Connected & Active"
-
+                
                 reply = reply.replace("Abdullah:", "").strip()
                 if "Goodbye" not in reply:
                     self._save_live_memory(sana_message, reply)
@@ -172,5 +174,5 @@ class AbdullahBrain:
                 api["cooldown"] = time.time() + 60
                 continue
 
-        return {"reply": "All APIs are currently rate-limited or offline, Habibti!", "tokens": 0, "provider": "None"}
+        return {"reply": "All APIs are missing keys or offline, Habibti! Add keys to Render.", "tokens": 0, "provider": "None"}
             
