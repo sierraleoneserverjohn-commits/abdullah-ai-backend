@@ -3,6 +3,8 @@ import json
 import time
 from typing import List, Dict
 from groq import Groq
+from sqlalchemy import create_engine, Column, Integer, Text, DateTime, func
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Dynamic import check to prevent boot crash
 try:
@@ -11,13 +13,36 @@ try:
 except ImportError:
     HAS_GEMINI = False
 
+# Database Setup
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+# Fix for SQLAlchemy requiring 'postgresql://' instead of 'postgres://'
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+Base = declarative_base()
+
+class LiveMemory(Base):
+    __tablename__ = "live_memories"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    prompt = Column(Text, nullable=False)
+    completion = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 class AbdullahBrain:
-    def __init__(self, memory_file="abdullah_memory_dataset.json", live_file="live_learning.json"):
+    def __init__(self, memory_file="abdullah_memory_dataset.json"):
         self.memory_file = memory_file
-        self.live_file = live_file
-        
         self.base_memories = self._load_json(self.memory_file)
-        self.live_memories = self._load_json(self.live_file)
+        
+        # PostgreSQL Engine Initialization
+        self.db_active = False
+        if DATABASE_URL:
+            try:
+                self.engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+                Base.metadata.create_all(self.engine)
+                self.SessionLocal = sessionmaker(bind=self.engine)
+                self.db_active = True
+            except Exception as e:
+                print(f"Database Connection Error: {e}")
 
         self.api_slots = [
             {"id": "API_1", "env": "GROQ_API_KEY_1", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
@@ -67,13 +92,37 @@ class AbdullahBrain:
                 return []
         return []
 
-    def _save_live_memory(self, prompt: str, completion: str):
-        self.live_memories.append({"prompt": f"Sana: {prompt}", "completion": f"Abdullah: {completion}"})
+    def _get_recent_live_memories(self, limit: int = 5) -> List[Dict]:
+        """Fetch recent memories from PostgreSQL database."""
+        if not self.db_active:
+            return []
+        
+        session = self.SessionLocal()
         try:
-            with open(self.live_file, "w", encoding="utf-8") as f:
-                json.dump(self.live_memories, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+            records = session.query(LiveMemory).order_by(LiveMemory.id.desc()).limit(limit).all()
+            # Reverse to keep chronological context order
+            return [{"prompt": r.prompt, "completion": r.completion} for r in reversed(records)]
+        except Exception as e:
+            print(f"Failed to fetch memories: {e}")
+            return []
+        finally:
+            session.close()
+
+    def _save_live_memory(self, prompt: str, completion: str):
+        """Save a new interaction directly into PostgreSQL."""
+        if not self.db_active:
+            return
+            
+        session = self.SessionLocal()
+        try:
+            new_mem = LiveMemory(prompt=f"Sana: {prompt}", completion=f"Abdullah: {completion}")
+            session.add(new_mem)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Failed to save memory to DB: {e}")
+        finally:
+            session.close()
 
     def get_dashboard_metrics(self) -> dict:
         current_time = time.time()
@@ -104,6 +153,7 @@ class AbdullahBrain:
         return {
             "total_apis": 5,
             "connected_apis": connected_count,
+            "db_connected": self.db_active,
             "combined_tokens_used": total_used,
             "combined_tokens_remaining": max(0, total_capacity - total_used),
             "api_breakdown": api_details
@@ -141,7 +191,9 @@ class AbdullahBrain:
             "content": "Understood. I am Abdullah, talking only to my wife Sana."
         }]
 
-        for mem in self.live_memories[-2:]:
+        # Fetch latest memories from Postgres
+        db_memories = self._get_recent_live_memories(limit=3)
+        for mem in db_memories:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
             messages.append({"role": "model", "content": mem.get("completion", "")})
 
@@ -182,4 +234,4 @@ class AbdullahBrain:
                 continue
 
         return {"reply": "All APIs are offline or missing keys, Habibti!", "tokens": 0, "provider": "None"}
-                          
+            
