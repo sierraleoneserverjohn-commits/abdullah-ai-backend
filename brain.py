@@ -6,7 +6,7 @@ from groq import Groq
 from sqlalchemy import create_engine, Column, Integer, Text, DateTime, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Dynamic import check to prevent boot crash
+# Dynamic import check to prevent boot crashes if package fails
 try:
     import google.generativeai as genai
     HAS_GEMINI = True
@@ -15,7 +15,6 @@ except ImportError:
 
 # Database Setup
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-# Fix for SQLAlchemy requiring 'postgresql://' instead of 'postgres://'
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -33,7 +32,7 @@ class AbdullahBrain:
         self.memory_file = memory_file
         self.base_memories = self._load_json(self.memory_file)
         
-        # PostgreSQL Engine Initialization
+        # PostgreSQL Setup
         self.db_active = False
         if DATABASE_URL:
             try:
@@ -92,7 +91,7 @@ class AbdullahBrain:
                 return []
         return []
 
-    def _get_recent_live_memories(self, limit: int = 5) -> List[Dict]:
+    def get_recent_live_memories(self, limit: int = 5) -> List[Dict]:
         """Fetch recent memories from PostgreSQL database."""
         if not self.db_active:
             return []
@@ -100,7 +99,6 @@ class AbdullahBrain:
         session = self.SessionLocal()
         try:
             records = session.query(LiveMemory).order_by(LiveMemory.id.desc()).limit(limit).all()
-            # Reverse to keep chronological context order
             return [{"prompt": r.prompt, "completion": r.completion} for r in reversed(records)]
         except Exception as e:
             print(f"Failed to fetch memories: {e}")
@@ -108,7 +106,7 @@ class AbdullahBrain:
         finally:
             session.close()
 
-    def _save_live_memory(self, prompt: str, completion: str):
+    def save_live_memory(self, prompt: str, completion: str):
         """Save a new interaction directly into PostgreSQL."""
         if not self.db_active:
             return
@@ -191,8 +189,8 @@ class AbdullahBrain:
             "content": "Understood. I am Abdullah, talking only to my wife Sana."
         }]
 
-        # Fetch latest memories from Postgres
-        db_memories = self._get_recent_live_memories(limit=3)
+        # Fetch recent chat context from DB
+        db_memories = self.get_recent_live_memories(limit=3)
         for mem in db_memories:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
             messages.append({"role": "model", "content": mem.get("completion", "")})
@@ -209,7 +207,7 @@ class AbdullahBrain:
                     target["tokens_used"] += tokens
                     reply = reply.replace("Abdullah:", "").strip()
                     if "Goodbye" not in reply:
-                        self._save_live_memory(sana_message, reply)
+                        self.save_live_memory(sana_message, reply)
                     return {"reply": reply, "tokens": tokens, "provider": f"{target['id']} ({target['provider']})"}
                 except Exception as e:
                     return {"reply": f"Selected API failed: {str(e)}", "tokens": 0, "provider": selected_api}
@@ -224,7 +222,7 @@ class AbdullahBrain:
                 
                 reply = reply.replace("Abdullah:", "").strip()
                 if "Goodbye" not in reply:
-                    self._save_live_memory(sana_message, reply)
+                    self.save_live_memory(sana_message, reply)
 
                 return {"reply": reply, "tokens": tokens, "provider": f"{api['id']} ({api['provider']})"}
 
