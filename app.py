@@ -22,16 +22,17 @@ brain = AbdullahBrain()
 
 class ChatPayload(BaseModel):
     message: str
-    model: str = "llama-3.3-70b-versatile" # Receives model choice from frontend
+    model: str = "llama-3.3-70b-versatile"
 
 @app.get("/")
 def home():
-    diagnostics = brain.get_api_diagnostics()
+    """Real-time health check endpoint to prove backend is connected."""
     return {
         "status": "online",
+        "backend_connected": True,
         "system": "Abdullah AI Brain Active",
         "learning_score": brain.get_learning_progress(),
-        "api_diagnostics": diagnostics
+        "api_diagnostics": brain.get_api_diagnostics()
     }
 
 @app.post("/chat")
@@ -40,17 +41,14 @@ async def chat_endpoint(payload: ChatPayload):
     if not sana_text:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    # Pass the message and the requested model to the brain
+    # Generate response via the auto-routing brain
     result = brain.generate_chat_response(sana_text, payload.model)
-    
-    # Get fresh diagnostics after the chat
-    diagnostics = brain.get_api_diagnostics()
     
     return {
         "response": result["reply"],
-        "tokens_used_this_msg": result["tokens"],
+        "tokens_used": result["tokens"], # Fixed variable name to prevent NaN on frontend
         "model_used": result["model_used"],
         "learning_progress": brain.get_learning_progress(),
-        "api_diagnostics": diagnostics
-        }
+        "api_diagnostics": brain.get_api_diagnostics()
+    }
     
