@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Johnny Tec AI Control Panel</title>
+    <title>Johnny Tec AI - 5 API Hub</title>
     <style>
         body { background-color: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
         .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
@@ -11,11 +11,8 @@
         .stat-box { background: #334155; padding: 15px; border-radius: 8px; text-align: center; }
         .token-text { color: #10b981; font-weight: bold; font-size: 1.2rem; }
         
-        .progress-container { width: 100%; background: #475569; border-radius: 8px; margin-top: 10px; overflow: hidden; }
-        .progress-bar { height: 10px; background: #3b82f6; width: 0%; transition: width 0.5s ease-in-out; }
-        
         .api-dashboard { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; margin-top: 15px; }
-        .api-item { background: #1e293b; padding: 10px; margin-top: 10px; border-radius: 5px; border-left: 4px solid #10b981; display: flex; justify-content: space-between; align-items: center;}
+        .api-item { background: #1e293b; padding: 10px; margin-top: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid; }
         
         .chat-box { height: 300px; overflow-y: auto; background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #334155; }
         .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 80%; }
@@ -39,7 +36,7 @@
         <div class="stat-box">
             <h3>Backend & Frontend Status</h3>
             <p id="connection-status" style="font-weight: bold; color: #f59e0b;">Checking Connection...</p>
-            <small>Active APIs: <span id="working-count">0</span> / <span id="total-count">0</span></small>
+            <small>Working APIs: <span id="working-count">0</span> / 5</small>
         </div>
     </div>
 
@@ -66,21 +63,20 @@
     </div>
 
     <script>
-        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; // Your Render URL
+        // !! MAKE SURE THIS IS YOUR EXACT RENDER URL !!
+        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; 
 
         async function updateDashboard() {
             try {
                 const response = await fetch(`${BACKEND_URL}/dashboard`);
                 const data = await response.json();
 
-                // Frontend connection confirmed
                 document.getElementById('connection-status').innerText = "Connected & Working 🟢";
                 document.getElementById('connection-status').style.color = "#10b981";
 
                 document.getElementById('global-tokens').innerText = data.combined_tokens_used.toLocaleString();
                 document.getElementById('global-remaining').innerText = data.combined_tokens_remaining.toLocaleString();
                 document.getElementById('working-count').innerText = data.connected_apis;
-                document.getElementById('total-count').innerText = data.total_apis;
 
                 const apiList = document.getElementById('api-list');
                 const apiSelect = document.getElementById('apiSelect');
@@ -90,15 +86,16 @@
                 apiList.innerHTML = '';
 
                 data.api_breakdown.forEach(api => {
-                    // Populate Dropdown for manual testing
-                    apiSelect.innerHTML += `<option value="${api.id}">Test Manual: ${api.id} (${api.provider})</option>`;
+                    apiSelect.innerHTML += `<option value="${api.id}">Force Route: ${api.id} (${api.provider})</option>`;
 
-                    // Populate UI Monitor Box
-                    let color = api.status.includes("Active") ? "#10b981" : "#ef4444";
+                    let color = "#ef4444"; // Red default
+                    if (api.status === "Connected & Active") color = "#10b981"; // Green
+                    if (api.status === "Awaiting API Key") color = "#64748b"; // Gray
+
                     apiList.innerHTML += `
                         <div class="api-item" style="border-left-color: ${color};">
                             <div>
-                                <strong>${api.id}</strong> <span style="color: #3b82f6;">(${api.provider})</span>
+                                <strong>${api.id}</strong> <span style="color: #3b82f6; font-size: 0.8rem;">[${api.env_name}]</span>
                                 <div style="font-size: 0.8rem; color: #94a3b8;">Tokens Used: ${api.tokens_used} | Remaining: ${api.remaining.toLocaleString()}</div>
                             </div>
                             <div style="color: ${color}; font-weight: bold; font-size: 0.85rem;">
@@ -111,7 +108,7 @@
             } catch (err) {
                 document.getElementById('connection-status').innerText = "Disconnected 🔴";
                 document.getElementById('connection-status').style.color = "#ef4444";
-                document.getElementById('api-list').innerHTML = `<p style="text-align: center; color: #ef4444;">Network Error. Is Render awake?</p>`;
+                document.getElementById('api-list').innerHTML = `<p style="text-align: center; color: #ef4444;">Backend Network Error. Is Render awake?</p>`;
             }
         }
 
@@ -132,7 +129,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         message: text,
-                        api_choice: apiSelect.value // Sends either 'auto' or specific key ID
+                        api_choice: apiSelect.value 
                     })
                 });
                 
@@ -141,21 +138,20 @@
                 chatbox.innerHTML += `<div class="msg abdullah">
                     ${data.response}
                     <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 5px; text-align: right;">
-                        ⚡ Routed via ${data.provider_used}
+                        ⚡ Routed via ${data.provider_used || "Unknown"}
                     </div>
                 </div>`;
                 chatbox.scrollTop = chatbox.scrollHeight;
 
                 if (data.dashboard) {
-                    updateDashboard();
+                    updateDashboard(); // Refreshes stats smoothly in background
                 }
 
             } catch (error) {
-                chatbox.innerHTML += `<div class="msg abdullah" style="color:#ef4444;">Network Error. Is Render awake?</div>`;
+                chatbox.innerHTML += `<div class="msg abdullah" style="color:#ef4444;">Network Error while sending message.</div>`;
             }
         }
 
-        // Run dashboard fetch on load
         window.onload = updateDashboard;
     </script>
 </body>
