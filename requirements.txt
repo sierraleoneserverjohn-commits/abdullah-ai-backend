@@ -5,8 +5,3 @@ groq
 google-generativeai
 sqlalchemy
 psycopg2-binary
-fastapi
-uvicorn
-pydantic
-groq
-google-generativeai
