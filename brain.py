@@ -10,22 +10,25 @@ class AbdullahBrain:
         self.memory_file = memory_file
         self.live_file = live_file
         
-        # Load memories
         self.base_memories = self._load_json(self.memory_file)
         self.live_memories = self._load_json(self.live_file)
         self.learning_target = 50
 
-        # Dynamically load all available Groq API keys from environment
-        self.api_keys = []
-        for key, value in os.environ.items():
-            if key.startswith("GROQ_API_KEY") and value.strip():
-                self.api_keys.append(value.strip())
-        
-        # API Health Tracker: Tracks tokens and 60-second cooldowns
-        self.key_health = {
-            key: {"tokens_used": 0, "cooldown_until": 0} 
-            for key in self.api_keys
-        }
+        # Dynamically load and track all Groq API keys
+        self.api_keys = {}
+        for env_name, env_val in os.environ.items():
+            if env_name.startswith("GROQ_API_KEY") and env_val.strip():
+                key_str = env_val.strip()
+                # Mask the key for security (e.g., gsk_1234...abcd)
+                masked = key_str[:7] + "..." + key_str[-4:] if len(key_str) > 10 else "Invalid Key"
+                
+                self.api_keys[key_str] = {
+                    "name": env_name,
+                    "masked": masked,
+                    "tokens_used": 0,
+                    "status": "Working", # Can be 'Working', 'Rate Limited', or 'Offline'
+                    "cooldown_until": 0
+                }
 
     def _load_json(self, filepath: str) -> List[Dict]:
         if os.path.exists(filepath):
@@ -46,21 +49,33 @@ class AbdullahBrain:
         return min(progress, 100)
 
     def get_api_diagnostics(self) -> dict:
-        """Calculates total active keys and combined tokens used."""
-        active_keys = 0
-        total_tokens = 0
+        """Returns real-time data on all APIs for the frontend."""
         current_time = time.time()
-        
-        for key, stats in self.key_health.items():
-            total_tokens += stats["tokens_used"]
-            if current_time >= stats["cooldown_until"]:
-                active_keys += 1
-                
+        total_active_tokens = 0
+        working_count = 0
+        key_details = []
+
+        for key, data in self.api_keys.items():
+            # Check if a rate-limited key has finished its 60-second cooldown
+            if data["status"] == "Rate Limited" and current_time >= data["cooldown_until"]:
+                data["status"] = "Working"
+
+            if data["status"] == "Working":
+                working_count += 1
+                total_active_tokens += data["tokens_used"]
+
+            key_details.append({
+                "api_name": data["name"],
+                "key_preview": data["masked"],
+                "status": data["status"],
+                "tokens_used": data["tokens_used"]
+            })
+
         return {
             "total_keys_configured": len(self.api_keys),
-            "active_keys_available": active_keys,
-            "total_session_tokens": total_tokens,
-            "max_free_capacity": len(self.api_keys) * 6000 # 6k per key
+            "active_working_keys": working_count,
+            "combined_active_tokens": total_active_tokens,
+            "api_list": key_details
         }
 
     def _build_system_prompt(self) -> str:
@@ -79,7 +94,6 @@ class AbdullahBrain:
     def generate_chat_response(self, sana_message: str, selected_model: str = "llama-3.3-70b-versatile") -> dict:
         messages = [{"role": "system", "content": self._build_system_prompt()}]
 
-        # Keep context tight (last 6 pairs) to save tokens
         combined_memory = self.base_memories[-4:] + self.live_memories[-2:]
         for mem in combined_memory:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
@@ -92,10 +106,10 @@ class AbdullahBrain:
 
         current_time = time.time()
         
-        # Try every key that isn't on cooldown
-        for key in self.api_keys:
-            if current_time < self.key_health[key]["cooldown_until"]:
-                continue # Skip this key, it's resting
+        # Automatic API Routing
+        for key, data in self.api_keys.items():
+            if data["status"] == "Rate Limited" and current_time < data["cooldown_until"]:
+                continue # Skip this key, try the next one
                 
             try:
                 client = Groq(api_key=key)
@@ -107,10 +121,11 @@ class AbdullahBrain:
                 )
                 
                 reply = completion.choices[0].message.content.strip()
-                tokens_used = completion.usage.total_tokens
+                tokens = completion.usage.total_tokens
 
-                # Track usage for this specific key
-                self.key_health[key]["tokens_used"] += tokens_used
+                # Success! Update this key's stats
+                self.api_keys[key]["tokens_used"] += tokens
+                self.api_keys[key]["status"] = "Working"
 
                 if reply.startswith("Abdullah:"):
                     reply = reply.replace("Abdullah:", "", 1).strip()
@@ -118,20 +133,17 @@ class AbdullahBrain:
                 if "Goodbye" not in reply:
                     self._save_live_memory(sana_message, reply)
 
-                return {"reply": reply, "tokens": tokens_used, "model_used": selected_model}
+                return {"reply": reply, "tokens": tokens, "model_used": selected_model}
 
             except Exception as err:
                 error_msg = str(err).lower()
-                # If we hit a rate limit (429), put this key in timeout for 60 seconds
                 if "rate limit" in error_msg or "429" in error_msg:
-                    print(f"⚠️ Key hit rate limit. Cooling down for 60s.")
-                    self.key_health[key]["cooldown_until"] = time.time() + 60
-                continue
+                    self.api_keys[key]["status"] = "Rate Limited"
+                    self.api_keys[key]["cooldown_until"] = time.time() + 60
+                else:
+                    self.api_keys[key]["status"] = "Offline"
+                continue # Loop back and instantly try the next key
         
-        # FALLBACK IDEA: If all keys fail on the heavy model, try one last time on the ultra-fast 8B model
-        if selected_model != "llama-3.1-8b-instant":
-            print("🔄 All keys exhausted on heavy model. Falling back to 8B Instant.")
-            return self.generate_chat_response(sana_message, "llama-3.1-8b-instant")
-
-        return {"reply": "My love, my network is completely overloaded right now. Give me a minute to breathe!", "tokens": 0, "model_used": "fallback"}
-        
+        # If all keys fail
+        return {"reply": "My love, my network is completely overloaded right now. Give me a minute to breathe!", "tokens": 0, "model_used": "none"}
+                    
