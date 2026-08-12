@@ -48,4 +48,21 @@ async def chat_endpoint(payload: ChatPayload):
         "provider_used": result["provider"],
         "dashboard": brain.get_dashboard_metrics()
     }
+    @app.get("/api/memories")
+def get_stored_memories():
+    if hasattr(brain, 'SessionLocal') and brain.db_active:
+        session = brain.SessionLocal()
+        try:
+            records = session.query(LiveMemory).order_by(LiveMemory.id.desc()).limit(20).all()
+            return {
+                "status": "connected",
+                "count": len(records),
+                "memories": [{"id": r.id, "prompt": r.prompt, "completion": r.completion, "time": r.created_at} for r in records]
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+    return {"status": "db_not_connected"}
+                
     
