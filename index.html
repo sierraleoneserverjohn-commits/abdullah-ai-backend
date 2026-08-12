@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Johnny Tec AI - 5 API Hub</title>
+    <title>Johnny Tec AI - 5 API Control Panel</title>
     <style>
         body { background-color: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
         .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
@@ -31,19 +31,18 @@
         <div class="stat-box">
             <h3>Combined Tokens Used</h3>
             <p class="token-text" id="global-tokens">0</p>
-            <small>Remaining Limit: <span id="global-remaining">Loading...</span></small>
+            <small>Remaining Capacity: <span id="global-remaining">Loading...</span></small>
         </div>
         <div class="stat-box">
-            <h3>Backend & Frontend Status</h3>
+            <h3>Backend Status</h3>
             <p id="connection-status" style="font-weight: bold; color: #f59e0b;">Checking Connection...</p>
-            <small>Working APIs: <span id="working-count">0</span> / 5</small>
+            <small>Active APIs: <span id="working-count">0</span> / 5</small>
         </div>
     </div>
 
-    <!-- API Selection & Monitoring Dashboard -->
     <div class="card">
-        <h3 style="margin-top: 0;">🚀 5-API Architecture Hub</h3>
-        <label for="apiSelect" style="font-size: 0.9rem; color: #94a3b8;">Choose API Mode:</label><br>
+        <h3 style="margin-top: 0;">🚀 5-API Architecture Engine</h3>
+        <label for="apiSelect" style="font-size: 0.9rem; color: #94a3b8;">Choose Routing Mode:</label><br>
         <select id="apiSelect" style="width: 100%; margin-top: 5px; margin-bottom: 15px; padding: 10px;">
             <option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>
         </select>
@@ -63,8 +62,7 @@
     </div>
 
     <script>
-        // !! MAKE SURE THIS IS YOUR EXACT RENDER URL !!
-        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; 
+        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com";
 
         async function updateDashboard() {
             try {
@@ -81,16 +79,16 @@
                 const apiList = document.getElementById('api-list');
                 const apiSelect = document.getElementById('apiSelect');
                 
-                // Keep 'auto' option, rebuild the rest
+                const currentSelection = apiSelect.value;
                 apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
                 apiList.innerHTML = '';
 
                 data.api_breakdown.forEach(api => {
                     apiSelect.innerHTML += `<option value="${api.id}">Force Route: ${api.id} (${api.provider})</option>`;
 
-                    let color = "#ef4444"; // Red default
-                    if (api.status === "Connected & Active") color = "#10b981"; // Green
-                    if (api.status === "Awaiting API Key") color = "#64748b"; // Gray
+                    let color = "#ef4444"; 
+                    if (api.status === "Connected & Active") color = "#10b981"; 
+                    if (api.status === "Awaiting API Key") color = "#64748b"; 
 
                     apiList.innerHTML += `
                         <div class="api-item" style="border-left-color: ${color};">
@@ -104,6 +102,8 @@
                         </div>
                     `;
                 });
+
+                apiSelect.value = currentSelection;
 
             } catch (err) {
                 document.getElementById('connection-status').innerText = "Disconnected 🔴";
@@ -144,7 +144,7 @@
                 chatbox.scrollTop = chatbox.scrollHeight;
 
                 if (data.dashboard) {
-                    updateDashboard(); // Refreshes stats smoothly in background
+                    updateDashboard();
                 }
 
             } catch (error) {
