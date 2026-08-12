@@ -3,7 +3,13 @@ import json
 import time
 from typing import List, Dict
 from groq import Groq
-import google.generativeai as genai
+
+# Dynamic import check to prevent boot crash
+try:
+    import google.generativeai as genai
+    HAS_GEMINI = True
+except ImportError:
+    HAS_GEMINI = False
 
 class AbdullahBrain:
     def __init__(self, memory_file="abdullah_memory_dataset.json", live_file="live_learning.json"):
@@ -13,7 +19,6 @@ class AbdullahBrain:
         self.base_memories = self._load_json(self.memory_file)
         self.live_memories = self._load_json(self.live_file)
 
-        # 5 Hardcoded slots for your full multi-API engine
         self.api_slots = [
             {"id": "API_1", "env": "GROQ_API_KEY_1", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
             {"id": "API_2", "env": "GROQ_API_KEY_2", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
@@ -26,11 +31,9 @@ class AbdullahBrain:
         self._initialize_slots()
 
     def _initialize_slots(self):
-        """Scans environment variables and configures active status for each slot."""
         self.api_pool = []
         for slot in self.api_slots:
             key = os.getenv(slot["env"], "").strip()
-            # Also fallback to legacy key names if present
             if not key and slot["env"] == "GROQ_API_KEY_1":
                 key = os.getenv("GROQ_API_KEY", "").strip()
 
@@ -69,8 +72,8 @@ class AbdullahBrain:
         try:
             with open(self.live_file, "w", encoding="utf-8") as f:
                 json.dump(self.live_memories, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Memory Save Warning: {str(e)}")
+        except Exception:
+            pass
 
     def get_dashboard_metrics(self) -> dict:
         current_time = time.time()
@@ -108,7 +111,7 @@ class AbdullahBrain:
 
     def _execute_api_call(self, api, messages):
         if not api["key"]:
-            raise Exception(f"Key missing for {api['env_name']}. Add it in Render settings.")
+            raise Exception(f"Key missing for {api['env_name']}.")
 
         if api["provider"] == "Groq":
             client = Groq(api_key=api["key"])
@@ -118,6 +121,8 @@ class AbdullahBrain:
             return completion.choices[0].message.content.strip(), completion.usage.total_tokens
         
         elif api["provider"] == "Gemini":
+            if not HAS_GEMINI:
+                raise Exception("google-generativeai module not installed on server.")
             genai.configure(api_key=api["key"])
             model = genai.GenerativeModel(api["model"])
             gemini_history = [{"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]} for m in messages]
@@ -142,9 +147,6 @@ class AbdullahBrain:
 
         messages.append({"role": "user", "content": f"Sana: {sana_message}"})
 
-        current_time = time.time()
-
-        # MANUAL MODE
         if selected_api != "auto":
             target = next((api for api in self.api_pool if api["id"] == selected_api), None)
             if target:
@@ -160,7 +162,6 @@ class AbdullahBrain:
                 except Exception as e:
                     return {"reply": f"Selected API failed: {str(e)}", "tokens": 0, "provider": selected_api}
 
-        # AUTO-SWITCH / FAILOVER MODE
         for api in self.api_pool:
             if api["status"] != "Connected & Active":
                 continue
@@ -181,4 +182,4 @@ class AbdullahBrain:
                 continue
 
         return {"reply": "All APIs are offline or missing keys, Habibti!", "tokens": 0, "provider": "None"}
-                
+                          
