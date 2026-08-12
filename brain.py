@@ -13,7 +13,7 @@ class AbdullahBrain:
         self.base_memories = self._load_json(self.memory_file)
         self.live_memories = self._load_json(self.live_file)
 
-        # Hardcode the 5 slots so they always appear on the frontend
+        # 5 Hardcoded slots for your full multi-API engine
         self.api_slots = [
             {"id": "API_1", "env": "GROQ_API_KEY_1", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
             {"id": "API_2", "env": "GROQ_API_KEY_2", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
@@ -26,10 +26,14 @@ class AbdullahBrain:
         self._initialize_slots()
 
     def _initialize_slots(self):
-        """Builds the 5 slots and checks if you have added the keys yet."""
+        """Scans environment variables and configures active status for each slot."""
+        self.api_pool = []
         for slot in self.api_slots:
             key = os.getenv(slot["env"], "").strip()
-            
+            # Also fallback to legacy key names if present
+            if not key and slot["env"] == "GROQ_API_KEY_1":
+                key = os.getenv("GROQ_API_KEY", "").strip()
+
             if key:
                 status = "Connected & Active"
                 masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "Valid Key"
@@ -56,14 +60,17 @@ class AbdullahBrain:
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
+            except Exception:
                 return []
         return []
 
     def _save_live_memory(self, prompt: str, completion: str):
         self.live_memories.append({"prompt": f"Sana: {prompt}", "completion": f"Abdullah: {completion}"})
-        with open(self.live_file, "w", encoding="utf-8") as f:
-            json.dump(self.live_memories, f, ensure_ascii=False, indent=2)
+        try:
+            with open(self.live_file, "w", encoding="utf-8") as f:
+                json.dump(self.live_memories, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Memory Save Warning: {str(e)}")
 
     def get_dashboard_metrics(self) -> dict:
         current_time = time.time()
@@ -73,7 +80,6 @@ class AbdullahBrain:
         api_details = []
 
         for api in self.api_pool:
-            # Auto-recover APIs that finished their 60-second cooldown timeout
             if api["status"] == "Rate Limited" and current_time > api["cooldown"]:
                 api["status"] = "Connected & Active"
                 
@@ -89,20 +95,20 @@ class AbdullahBrain:
                 "provider": api["provider"],
                 "status": api["status"],
                 "tokens_used": api["tokens_used"],
-                "remaining": api["daily_limit"] - api["tokens_used"]
+                "remaining": max(0, api["daily_limit"] - api["tokens_used"])
             })
 
         return {
             "total_apis": 5,
             "connected_apis": connected_count,
             "combined_tokens_used": total_used,
-            "combined_tokens_remaining": total_capacity - total_used,
+            "combined_tokens_remaining": max(0, total_capacity - total_used),
             "api_breakdown": api_details
         }
 
     def _execute_api_call(self, api, messages):
         if not api["key"]:
-            raise Exception("Key missing. Add to Render.")
+            raise Exception(f"Key missing for {api['env_name']}. Add it in Render settings.")
 
         if api["provider"] == "Groq":
             client = Groq(api_key=api["key"])
@@ -138,12 +144,12 @@ class AbdullahBrain:
 
         current_time = time.time()
 
-        # MANUAL OVERRIDE MODE
+        # MANUAL MODE
         if selected_api != "auto":
             target = next((api for api in self.api_pool if api["id"] == selected_api), None)
             if target:
                 if target["status"] == "Awaiting API Key":
-                    return {"reply": f"Habibti, {selected_api} has no key added yet!", "tokens": 0, "provider": selected_api}
+                    return {"reply": f"Habibti, {selected_api} has no key configured yet!", "tokens": 0, "provider": selected_api}
                 try:
                     reply, tokens = self._execute_api_call(target, messages)
                     target["tokens_used"] += tokens
@@ -157,7 +163,7 @@ class AbdullahBrain:
         # AUTO-SWITCH / FAILOVER MODE
         for api in self.api_pool:
             if api["status"] != "Connected & Active":
-                continue # Skip APIs that are missing keys, offline, or rate-limited
+                continue
 
             try:
                 reply, tokens = self._execute_api_call(api, messages)
@@ -174,5 +180,5 @@ class AbdullahBrain:
                 api["cooldown"] = time.time() + 60
                 continue
 
-        return {"reply": "All APIs are missing keys or offline, Habibti! Add keys to Render.", "tokens": 0, "provider": "None"}
-            
+        return {"reply": "All APIs are offline or missing keys, Habibti!", "tokens": 0, "provider": "None"}
+                
