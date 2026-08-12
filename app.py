@@ -2,7 +2,6 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from brain import AbdullahBrain, LiveMemory
 
@@ -28,19 +27,24 @@ def serve_home():
         return FileResponse("index.html")
     return "<h1>Abdullah AI Engine Active</h1>"
 
+# Handles both /dashboard and /api/dashboard
+@app.get("/dashboard")
 @app.get("/api/dashboard")
 def get_dashboard():
     return brain.get_dashboard_metrics()
 
+# Handles both /chat and /api/chat
+@app.post("/chat")
 @app.post("/api/chat")
 def process_chat(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     return brain.generate_chat_response(sana_message=req.message, selected_api=req.selected_api)
 
+# Handles memory inspection
+@app.get("/memories")
 @app.get("/api/memories")
 def inspect_memories():
-    """Endpoint to verify stored database memories directly from your browser."""
     if hasattr(brain, 'SessionLocal') and brain.db_active:
         session = brain.SessionLocal()
         try:
