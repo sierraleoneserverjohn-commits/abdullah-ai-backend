@@ -3,39 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Abdullah AI - Sana's Husband</title>
+    <title>Johnny Tec AI Control Panel</title>
     <style>
         body { background-color: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
         .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-        
-        /* Stats Grid */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .stat-box { background: #334155; padding: 15px; border-radius: 8px; text-align: center; }
         .token-text { color: #10b981; font-weight: bold; font-size: 1.2rem; }
         
-        /* Learning Progress Bar */
         .progress-container { width: 100%; background: #475569; border-radius: 8px; margin-top: 10px; overflow: hidden; }
         .progress-bar { height: 10px; background: #3b82f6; width: 0%; transition: width 0.5s ease-in-out; }
         
-        /* API Dashboard Styles */
         .api-dashboard { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; margin-top: 15px; }
-        .api-item { background: #1e293b; padding: 10px; margin-top: 10px; border-radius: 5px; border-left: 4px solid #475569; display: flex; justify-content: space-between; align-items: center;}
-        .api-name { font-weight: bold; font-size: 0.9rem; }
-        .api-stats { font-size: 0.8rem; color: #94a3b8; }
+        .api-item { background: #1e293b; padding: 10px; margin-top: 10px; border-radius: 5px; border-left: 4px solid #10b981; display: flex; justify-content: space-between; align-items: center;}
         
-        /* Chat Simulator Styles */
         .chat-box { height: 300px; overflow-y: auto; background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #334155; }
         .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 80%; }
         .sana { background: #3b82f6; margin-left: auto; text-align: right; }
         .abdullah { background: #475569; margin-right: auto; }
         
-        input { width: calc(100% - 90px); padding: 10px; border-radius: 5px; border: none; }
+        input, select { width: calc(100% - 110px); padding: 10px; border-radius: 5px; border: none; background: #334155; color: white; margin-right: 5px; }
         button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <h2>Abdullah AI Control Panel</h2>
+    <h2>Johnny Tec AI Control Panel</h2>
 
     <div class="stats-grid">
         <div class="stat-box">
@@ -44,103 +37,91 @@
             <small>Remaining Limit: <span id="global-remaining">Loading...</span></small>
         </div>
         <div class="stat-box">
-            <h3>Live Learning with Sana</h3>
-            <p id="learning-text" style="font-weight: bold; color: #3b82f6;">0%</p>
-            <div class="progress-container">
-                <div class="progress-bar" id="learning-bar"></div>
-            </div>
+            <h3>Backend & Frontend Status</h3>
+            <p id="connection-status" style="font-weight: bold; color: #f59e0b;">Checking Connection...</p>
+            <small>Active APIs: <span id="working-count">0</span> / <span id="total-count">0</span></small>
         </div>
     </div>
 
-    <!-- NEW: 5-API Routing Dashboard -->
+    <!-- API Selection & Monitoring Dashboard -->
     <div class="card">
-        <h3 style="margin-top: 0;">🚀 Johnny Tec AI - 5 API Engine</h3>
-        <p style="font-size: 0.9rem; margin-bottom: 5px;">Server Connection: <span id="connection-status" style="color: #f59e0b; font-weight: bold;">Checking...</span></p>
-        <p style="font-size: 0.9rem; margin-top: 0; color: #94a3b8;">Active APIs: <span id="working-apis-count">0</span> / <span id="total-apis-count">0</span></p>
-        
+        <h3 style="margin-top: 0;">🚀 5-API Architecture Hub</h3>
+        <label for="apiSelect" style="font-size: 0.9rem; color: #94a3b8;">Choose API Mode:</label><br>
+        <select id="apiSelect" style="width: 100%; margin-top: 5px; margin-bottom: 15px; padding: 10px;">
+            <option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>
+        </select>
+
         <div class="api-dashboard" id="api-list">
-            <p style="text-align: center; color: #94a3b8; font-size: 0.9rem;">Initializing API Engine...</p>
+            <p style="text-align: center; color: #94a3b8;">Loading API States...</p>
         </div>
     </div>
 
     <div class="card">
         <h3 style="margin-top: 0;">Live Chat Simulator</h3>
         <div class="chat-box" id="chatbox"></div>
-        <div>
+        <div style="display: flex;">
             <input type="text" id="userInput" placeholder="Type a message as Sana...">
             <button onclick="sendMessage()">Send</button>
         </div>
     </div>
 
     <script>
-        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; // Change this if your URL is different
+        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; // Your Render URL
 
-        // Function to update the dashboard UI
-        function updateDashboardUI(dashboardData) {
-            // Update Connection Status
-            const connStatus = document.getElementById('connection-status');
-            connStatus.innerText = 'Connected 🟢';
-            connStatus.style.color = '#10b981';
-
-            // Update Token Math
-            document.getElementById('global-tokens').innerText = dashboardData.combined_tokens_used.toLocaleString();
-            document.getElementById('global-remaining').innerText = dashboardData.combined_tokens_remaining.toLocaleString();
-            
-            // Update API Counts
-            document.getElementById('working-apis-count').innerText = dashboardData.working_apis;
-            document.getElementById('total-apis-count').innerText = dashboardData.total_apis;
-
-            // Render individual APIs
-            const apiList = document.getElementById('api-list');
-            apiList.innerHTML = ''; // Clear loading text
-            
-            dashboardData.api_breakdown.forEach(api => {
-                // Determine color based on status
-                let statusColor = '#ef4444'; // Default Red (Offline)
-                let statusIcon = '❌';
-                
-                if (api.status === 'Working') {
-                    statusColor = '#10b981'; // Green
-                    statusIcon = '✅';
-                } else if (api.status === 'Rate Limited') {
-                    statusColor = '#f59e0b'; // Yellow/Orange
-                    statusIcon = '⏳';
-                }
-
-                apiList.innerHTML += `
-                    <div class="api-item" style="border-left-color: ${statusColor};">
-                        <div>
-                            <div class="api-name">${api.name} <span style="color: #3b82f6; font-size: 0.8rem;">(${api.provider})</span></div>
-                            <div class="api-stats">Tokens Used: ${api.tokens_used.toLocaleString()} | Remaining: ${api.remaining.toLocaleString()}</div>
-                        </div>
-                        <div style="color: ${statusColor}; font-weight: bold; font-size: 0.9rem;">
-                            ${statusIcon} ${api.status}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-
-        // Check backend connection on page load
-        async function initDashboard() {
+        async function updateDashboard() {
             try {
                 const response = await fetch(`${BACKEND_URL}/dashboard`);
                 const data = await response.json();
-                updateDashboardUI(data);
-            } catch (error) {
-                document.getElementById('connection-status').innerText = 'Disconnected 🔴';
-                document.getElementById('connection-status').style.color = '#ef4444';
-                document.getElementById('api-list').innerHTML = '<p style="text-align: center; color: #ef4444;">Network Error. Is Render awake?</p>';
+
+                // Frontend connection confirmed
+                document.getElementById('connection-status').innerText = "Connected & Working 🟢";
+                document.getElementById('connection-status').style.color = "#10b981";
+
+                document.getElementById('global-tokens').innerText = data.combined_tokens_used.toLocaleString();
+                document.getElementById('global-remaining').innerText = data.combined_tokens_remaining.toLocaleString();
+                document.getElementById('working-count').innerText = data.connected_apis;
+                document.getElementById('total-count').innerText = data.total_apis;
+
+                const apiList = document.getElementById('api-list');
+                const apiSelect = document.getElementById('apiSelect');
+                
+                // Keep 'auto' option, rebuild the rest
+                apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
+                apiList.innerHTML = '';
+
+                data.api_breakdown.forEach(api => {
+                    // Populate Dropdown for manual testing
+                    apiSelect.innerHTML += `<option value="${api.id}">Test Manual: ${api.id} (${api.provider})</option>`;
+
+                    // Populate UI Monitor Box
+                    let color = api.status.includes("Active") ? "#10b981" : "#ef4444";
+                    apiList.innerHTML += `
+                        <div class="api-item" style="border-left-color: ${color};">
+                            <div>
+                                <strong>${api.id}</strong> <span style="color: #3b82f6;">(${api.provider})</span>
+                                <div style="font-size: 0.8rem; color: #94a3b8;">Tokens Used: ${api.tokens_used} | Remaining: ${api.remaining.toLocaleString()}</div>
+                            </div>
+                            <div style="color: ${color}; font-weight: bold; font-size: 0.85rem;">
+                                ${api.status}
+                            </div>
+                        </div>
+                    `;
+                });
+
+            } catch (err) {
+                document.getElementById('connection-status').innerText = "Disconnected 🔴";
+                document.getElementById('connection-status').style.color = "#ef4444";
+                document.getElementById('api-list').innerHTML = `<p style="text-align: center; color: #ef4444;">Network Error. Is Render awake?</p>`;
             }
         }
 
         async function sendMessage() {
             const input = document.getElementById('userInput');
             const chatbox = document.getElementById('chatbox');
+            const apiSelect = document.getElementById('apiSelect');
             const text = input.value.trim();
             if (!text) return;
 
-            // Add Sana's message
             chatbox.innerHTML += `<div class="msg sana">${text}</div>`;
             input.value = '';
             chatbox.scrollTop = chatbox.scrollHeight;
@@ -149,12 +130,14 @@
                 const response = await fetch(`${BACKEND_URL}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({ 
+                        message: text,
+                        api_choice: apiSelect.value // Sends either 'auto' or specific key ID
+                    })
                 });
                 
                 const data = await response.json();
                 
-                // Add Abdullah's response
                 chatbox.innerHTML += `<div class="msg abdullah">
                     ${data.response}
                     <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 5px; text-align: right;">
@@ -163,15 +146,8 @@
                 </div>`;
                 chatbox.scrollTop = chatbox.scrollHeight;
 
-                // Update Learning Progress
-                if (data.learning_progress !== undefined) {
-                    document.getElementById('learning-text').innerText = `${data.learning_progress}%`;
-                    document.getElementById('learning-bar').style.width = `${data.learning_progress}%`;
-                }
-
-                // Update Dashboard with fresh API data
                 if (data.dashboard) {
-                    updateDashboardUI(data.dashboard);
+                    updateDashboard();
                 }
 
             } catch (error) {
@@ -179,8 +155,8 @@
             }
         }
 
-        // Initialize dashboard when page loads
-        window.onload = initDashboard;
+        // Run dashboard fetch on load
+        window.onload = updateDashboard;
     </script>
 </body>
 </html>
