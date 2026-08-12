@@ -1,4 +1,3 @@
-import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -15,25 +14,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("⚡ Checking memory files...")
+print("⚡ Starting Abdullah Backend...")
 parse_whatsapp_chat()
 
 brain = AbdullahBrain()
 
 class ChatPayload(BaseModel):
     message: str
-    model: str = "llama-3.3-70b-versatile"
 
 @app.get("/")
 def home():
-    """Real-time health check endpoint to prove backend is connected."""
-    return {
-        "status": "online",
-        "backend_connected": True,
-        "system": "Abdullah AI Brain Active",
-        "learning_score": brain.get_learning_progress(),
-        "api_diagnostics": brain.get_api_diagnostics()
-    }
+    return {"status": "online", "system": "Abdullah AI Brain Active"}
 
 @app.post("/chat")
 async def chat_endpoint(payload: ChatPayload):
@@ -41,14 +32,12 @@ async def chat_endpoint(payload: ChatPayload):
     if not sana_text:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    # Generate response via the auto-routing brain
-    result = brain.generate_chat_response(sana_text, payload.model)
+    # Generate response
+    result = brain.generate_chat_response(sana_text)
     
     return {
         "response": result["reply"],
-        "tokens_used": result["tokens"], # Fixed variable name to prevent NaN on frontend
-        "model_used": result["model_used"],
-        "learning_progress": brain.get_learning_progress(),
-        "api_diagnostics": brain.get_api_diagnostics()
+        "tokens_used": result["tokens_used"],
+        "learning_progress": brain.get_learning_progress()
     }
     
