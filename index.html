@@ -7,6 +7,8 @@
     <style>
         body { background-color: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
         .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        
+        /* Stats Grid */
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .stat-box { background: #334155; padding: 15px; border-radius: 8px; text-align: center; }
         .token-text { color: #10b981; font-weight: bold; font-size: 1.2rem; }
@@ -15,6 +17,13 @@
         .progress-container { width: 100%; background: #475569; border-radius: 8px; margin-top: 10px; overflow: hidden; }
         .progress-bar { height: 10px; background: #3b82f6; width: 0%; transition: width 0.5s ease-in-out; }
         
+        /* API Dashboard Styles */
+        .api-dashboard { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; margin-top: 15px; }
+        .api-item { background: #1e293b; padding: 10px; margin-top: 10px; border-radius: 5px; border-left: 4px solid #475569; display: flex; justify-content: space-between; align-items: center;}
+        .api-name { font-weight: bold; font-size: 0.9rem; }
+        .api-stats { font-size: 0.8rem; color: #94a3b8; }
+        
+        /* Chat Simulator Styles */
         .chat-box { height: 300px; overflow-y: auto; background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #334155; }
         .msg { margin-bottom: 10px; padding: 10px; border-radius: 8px; max-width: 80%; }
         .sana { background: #3b82f6; margin-left: auto; text-align: right; }
@@ -30,9 +39,9 @@
 
     <div class="stats-grid">
         <div class="stat-box">
-            <h3>Session Tokens Used</h3>
-            <p class="token-text" id="token-counter">0</p>
-            <small>Max Limit: 6,000 / minute (Free)</small>
+            <h3>Combined Tokens Used</h3>
+            <p class="token-text" id="global-tokens">0</p>
+            <small>Remaining Limit: <span id="global-remaining">Loading...</span></small>
         </div>
         <div class="stat-box">
             <h3>Live Learning with Sana</h3>
@@ -43,8 +52,19 @@
         </div>
     </div>
 
+    <!-- NEW: 5-API Routing Dashboard -->
     <div class="card">
-        <h3>Live Chat Simulator</h3>
+        <h3 style="margin-top: 0;">🚀 Johnny Tec AI - 5 API Engine</h3>
+        <p style="font-size: 0.9rem; margin-bottom: 5px;">Server Connection: <span id="connection-status" style="color: #f59e0b; font-weight: bold;">Checking...</span></p>
+        <p style="font-size: 0.9rem; margin-top: 0; color: #94a3b8;">Active APIs: <span id="working-apis-count">0</span> / <span id="total-apis-count">0</span></p>
+        
+        <div class="api-dashboard" id="api-list">
+            <p style="text-align: center; color: #94a3b8; font-size: 0.9rem;">Initializing API Engine...</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top: 0;">Live Chat Simulator</h3>
         <div class="chat-box" id="chatbox"></div>
         <div>
             <input type="text" id="userInput" placeholder="Type a message as Sana...">
@@ -53,8 +73,66 @@
     </div>
 
     <script>
-        let totalTokens = 0;
-        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; // Change to your Render URL
+        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com"; // Change this if your URL is different
+
+        // Function to update the dashboard UI
+        function updateDashboardUI(dashboardData) {
+            // Update Connection Status
+            const connStatus = document.getElementById('connection-status');
+            connStatus.innerText = 'Connected 🟢';
+            connStatus.style.color = '#10b981';
+
+            // Update Token Math
+            document.getElementById('global-tokens').innerText = dashboardData.combined_tokens_used.toLocaleString();
+            document.getElementById('global-remaining').innerText = dashboardData.combined_tokens_remaining.toLocaleString();
+            
+            // Update API Counts
+            document.getElementById('working-apis-count').innerText = dashboardData.working_apis;
+            document.getElementById('total-apis-count').innerText = dashboardData.total_apis;
+
+            // Render individual APIs
+            const apiList = document.getElementById('api-list');
+            apiList.innerHTML = ''; // Clear loading text
+            
+            dashboardData.api_breakdown.forEach(api => {
+                // Determine color based on status
+                let statusColor = '#ef4444'; // Default Red (Offline)
+                let statusIcon = '❌';
+                
+                if (api.status === 'Working') {
+                    statusColor = '#10b981'; // Green
+                    statusIcon = '✅';
+                } else if (api.status === 'Rate Limited') {
+                    statusColor = '#f59e0b'; // Yellow/Orange
+                    statusIcon = '⏳';
+                }
+
+                apiList.innerHTML += `
+                    <div class="api-item" style="border-left-color: ${statusColor};">
+                        <div>
+                            <div class="api-name">${api.name} <span style="color: #3b82f6; font-size: 0.8rem;">(${api.provider})</span></div>
+                            <div class="api-stats">Tokens Used: ${api.tokens_used.toLocaleString()} | Remaining: ${api.remaining.toLocaleString()}</div>
+                        </div>
+                        <div style="color: ${statusColor}; font-weight: bold; font-size: 0.9rem;">
+                            ${statusIcon} ${api.status}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // Check backend connection on page load
+        async function initDashboard() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/dashboard`);
+                const data = await response.json();
+                updateDashboardUI(data);
+            } catch (error) {
+                document.getElementById('connection-status').innerText = 'Disconnected 🔴';
+                document.getElementById('connection-status').style.color = '#ef4444';
+                document.getElementById('api-list').innerHTML = '<p style="text-align: center; color: #ef4444;">Network Error. Is Render awake?</p>';
+            }
+        }
 
         async function sendMessage() {
             const input = document.getElementById('userInput');
@@ -77,22 +155,32 @@
                 const data = await response.json();
                 
                 // Add Abdullah's response
-                chatbox.innerHTML += `<div class="msg abdullah">${data.response}</div>`;
+                chatbox.innerHTML += `<div class="msg abdullah">
+                    ${data.response}
+                    <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 5px; text-align: right;">
+                        ⚡ Routed via ${data.provider_used}
+                    </div>
+                </div>`;
                 chatbox.scrollTop = chatbox.scrollHeight;
 
-                // Update Tokens
-                totalTokens += data.tokens_used;
-                document.getElementById('token-counter').innerText = totalTokens;
-
                 // Update Learning Progress
-                const progress = data.learning_progress;
-                document.getElementById('learning-text').innerText = `${progress}%`;
-                document.getElementById('learning-bar').style.width = `${progress}%`;
+                if (data.learning_progress !== undefined) {
+                    document.getElementById('learning-text').innerText = `${data.learning_progress}%`;
+                    document.getElementById('learning-bar').style.width = `${data.learning_progress}%`;
+                }
+
+                // Update Dashboard with fresh API data
+                if (data.dashboard) {
+                    updateDashboardUI(data.dashboard);
+                }
 
             } catch (error) {
-                chatbox.innerHTML += `<div class="msg abdullah" style="color:red;">Network Error. Is Render awake?</div>`;
+                chatbox.innerHTML += `<div class="msg abdullah" style="color:#ef4444;">Network Error. Is Render awake?</div>`;
             }
         }
+
+        // Initialize dashboard when page loads
+        window.onload = initDashboard;
     </script>
 </body>
 </html>
