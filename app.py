@@ -1,14 +1,13 @@
 import os
 import re
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from pydantic import BaseModel
 from brain import AbdullahBrain, LiveMemory
 
 app = FastAPI(title="Abdullah AI Backend")
 
-# Enable CORS for frontend requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,26 +22,20 @@ class ChatRequest(BaseModel):
     message: str
     selected_api: str = "auto"
 
-# -------------------------------------------------------------
 # 1. HOME ROUTE
-# -------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
     if os.path.exists("index.html"):
         return FileResponse("index.html")
     return "<h1>Abdullah AI Engine Active</h1>"
 
-# -------------------------------------------------------------
-# 2. DASHBOARD ROUTES (Handles /dashboard and /api/dashboard)
-# -------------------------------------------------------------
+# 2. DASHBOARD ROUTES
 @app.get("/dashboard")
 @app.get("/api/dashboard")
 def get_dashboard():
     return brain.get_dashboard_metrics()
 
-# -------------------------------------------------------------
-# 3. CHAT ROUTES (Handles /chat and /api/chat)
-# -------------------------------------------------------------
+# 3. CHAT ROUTES
 @app.post("/chat")
 @app.post("/api/chat")
 def process_chat(req: ChatRequest):
@@ -50,9 +43,7 @@ def process_chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     return brain.generate_chat_response(sana_message=req.message, selected_api=req.selected_api)
 
-# -------------------------------------------------------------
 # 4. MEMORY INSPECTOR ROUTE
-# -------------------------------------------------------------
 @app.get("/memories")
 @app.get("/api/memories")
 def inspect_memories():
@@ -78,9 +69,7 @@ def inspect_memories():
             session.close()
     return {"db_status": "Database not connected. Check DATABASE_URL on Render."}
 
-# -------------------------------------------------------------
-# 5. WHATSAPP CHAT FILE UPLOADER (Web Page)
-# -------------------------------------------------------------
+# 5. WHATSAPP UPLOAD FORM PAGE
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     return """
@@ -112,15 +101,19 @@ def upload_page():
     </html>
     """
 
-# -------------------------------------------------------------
 # 6. WHATSAPP CHAT PROCESSOR ENDPOINT
-# -------------------------------------------------------------
 @app.post("/api/upload-chat")
-async def process_chat_file(file: UploadFile = File(...)):
+async def process_chat_file(request: Request):
     if not hasattr(brain, 'SessionLocal') or not brain.db_active:
-        return {"error": "Database not connected. Check DATABASE_URL in Render settings."}
+        return JSONResponse({"error": "Database not connected. Check DATABASE_URL in Render settings."}, status_code=500)
     
-    contents = await file.read()
+    form = await request.form()
+    uploaded_file = form.get("file")
+    
+    if not uploaded_file:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+        
+    contents = await uploaded_file.read()
     text_content = contents.decode("utf-8", errors="ignore")
     lines = text_content.splitlines()
 
@@ -162,4 +155,4 @@ async def process_chat_file(file: UploadFile = File(...)):
     
     session.close()
     return {"status": "Warning", "message": "No matching conversation pairs found. Ensure speaker names in chat.txt include Sana and Abdullah."}
-            
+    
