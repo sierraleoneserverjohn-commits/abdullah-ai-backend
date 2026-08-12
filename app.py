@@ -2,9 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from brain import AbdullahBrain
-from upload_whatsapp import parse_whatsapp_chat
+import os
 
-app = FastAPI(title="Abdullah AI - Johnny Tec Backend")
+app = FastAPI(title="Johnny Tec - 5 API Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,12 +14,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-parse_whatsapp_chat()
 brain = AbdullahBrain()
 
 class ChatPayload(BaseModel):
     message: str
-    api_choice: str = "auto" # Accepts 'auto' or a specific key name like 'GROQ_API_KEY_1'
+    api_choice: str = "auto"
 
 @app.get("/")
 def home():
@@ -33,15 +32,16 @@ def get_dashboard():
 async def chat_endpoint(payload: ChatPayload):
     sana_text = payload.message.strip()
     if not sana_text:
-        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+        raise HTTPException(status_code=400, detail="Message empty.")
 
+    # Run the chat through the engine
     result = brain.generate_chat_response(sana_text, payload.api_choice)
     
+    # Return the AI response AND the fresh dashboard stats
     return {
         "response": result["reply"],
         "tokens_used": result["tokens"],
         "provider_used": result["provider"],
-        "learning_progress": brain.get_dashboard_metrics(), # Safe passing
         "dashboard": brain.get_dashboard_metrics()
     }
     
