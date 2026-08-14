@@ -1,13 +1,14 @@
 import os
-import re
-from fastapi import FastAPI, HTTPException, Request
+import time
+import httpx
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
-from brain import AbdullahBrain, LiveMemory
 
-app = FastAPI(title="Abdullah AI Backend")
+app = FastAPI(title="Abdullah AI Backend Engine")
 
+# CORS Middleware Setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,143 +17,154 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-brain = AbdullahBrain()
-
 class ChatRequest(BaseModel):
     message: str
     selected_api: str = "auto"
+
+# 🔑 Load API Keys from Environment Variables
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 # 1. HOME ROUTE
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
     if os.path.exists("index.html"):
         return FileResponse("index.html")
-    return "<h1>Abdullah AI Engine Active</h1>"
+    return "<h1>Abdullah AI 5-Engine Active</h1>"
 
-# 2. DASHBOARD ROUTES
+# 2. DASHBOARD STATUS ROUTE
 @app.get("/dashboard")
 @app.get("/api/dashboard")
 def get_dashboard():
-    return brain.get_dashboard_metrics()
+    keys = {
+        "Groq": bool(GROQ_API_KEY),
+        "Cerebras": bool(CEREBRAS_API_KEY),
+        "Gemini": bool(GEMINI_API_KEY),
+        "OpenRouter": bool(OPENROUTER_API_KEY),
+        "DeepSeek": bool(DEEPSEEK_API_KEY),
+    }
+    active_count = sum(keys.values())
+    return {
+        "status": "Connected & Working",
+        "active_apis": f"{active_count} / 5",
+        "providers_configured": keys
+    }
 
-# 3. CHAT ROUTES
+# -------------------------------------------------------------
+# ⚡ 5-PROVIDER ASYNC FETCH FUNCTIONS
+# -------------------------------------------------------------
+async def call_groq(client: httpx.AsyncClient, message: str) -> str:
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not configured")
+    res = await client.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": message}]
+        },
+        timeout=10.0
+    )
+    res.raise_for_status()
+    return res.json()["choices"][0]["message"]["content"]
+
+async def call_cerebras(client: httpx.AsyncClient, message: str) -> str:
+    if not CEREBRAS_API_KEY:
+        raise ValueError("CEREBRAS_API_KEY not configured")
+    res = await client.post(
+        "https://api.cerebras.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {CEREBRAS_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "model": "llama3.3-70b",
+            "messages": [{"role": "user", "content": message}]
+        },
+        timeout=10.0
+    )
+    res.raise_for_status()
+    return res.json()["choices"][0]["message"]["content"]
+
+async def call_gemini(client: httpx.AsyncClient, message: str) -> str:
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY not configured")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    res = await client.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": message}]}]},
+        timeout=10.0
+    )
+    res.raise_for_status()
+    return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+async def call_openrouter(client: httpx.AsyncClient, message: str) -> str:
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY not configured")
+    res = await client.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "model": "meta-llama/llama-3.3-70b-instruct",
+            "messages": [{"role": "user", "content": message}]
+        },
+        timeout=10.0
+    )
+    res.raise_for_status()
+    return res.json()["choices"][0]["message"]["content"]
+
+async def call_deepseek(client: httpx.AsyncClient, message: str) -> str:
+    if not DEEPSEEK_API_KEY:
+        raise ValueError("DEEPSEEK_API_KEY not configured")
+    res = await client.post(
+        "https://api.deepseek.com/chat/completions",
+        headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "model": "deepseek-chat",
+            "messages": [{"role": "user", "content": message}]
+        },
+        timeout=10.0
+    )
+    res.raise_for_status()
+    return res.json()["choices"][0]["message"]["content"]
+
+# -------------------------------------------------------------
+# 3. CHAT ROUTE (5-API AUTO FAILOVER PIPELINE)
+# -------------------------------------------------------------
 @app.post("/chat")
 @app.post("/api/chat")
-def process_chat(req: ChatRequest):
+async def process_chat(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    return brain.generate_chat_response(sana_message=req.message, selected_api=req.selected_api)
 
-# 4. MEMORY INSPECTOR ROUTE
-@app.get("/memories")
-@app.get("/api/memories")
-def inspect_memories():
-    if hasattr(brain, 'SessionLocal') and brain.db_active:
-        session = brain.SessionLocal()
-        try:
-            records = session.query(LiveMemory).order_by(LiveMemory.id.desc()).limit(20).all()
-            return {
-                "db_status": "Connected to Supabase",
-                "total_fetched": len(records),
-                "memories": [
-                    {
-                        "id": r.id, 
-                        "prompt": r.prompt, 
-                        "completion": r.completion, 
-                        "time": str(r.created_at)
-                    } for r in records
-                ]
-            }
-        except Exception as e:
-            return {"db_status": "Error reading database", "details": str(e)}
-        finally:
-            session.close()
-    return {"db_status": "Database not connected. Check DATABASE_URL on Render."}
+    start_time = time.time()
+    providers = [
+        ("API_1", "Groq", call_groq),
+        ("API_2", "Cerebras", call_cerebras),
+        ("API_3", "Gemini", call_gemini),
+        ("API_4", "OpenRouter", call_openrouter),
+        ("API_5", "DeepSeek", call_deepseek),
+    ]
 
-# 5. WHATSAPP UPLOAD FORM PAGE
-@app.get("/upload", response_class=HTMLResponse)
-def upload_page():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Upload WhatsApp Chat</title>
-        <style>
-            body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #fff; padding: 20px; text-align: center; }
-            .card { background: #1e293b; padding: 30px; border-radius: 12px; max-width: 400px; margin: 40px auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-            h2 { margin-bottom: 8px; color: #f8fafc; }
-            p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
-            input[type="file"] { margin: 15px 0; width: 100%; color: #cbd5e1; }
-            button { background: #8b5cf6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 16px; }
-            button:hover { background: #7c3aed; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>Upload chat.txt</h2>
-            <p>Upload your exported WhatsApp chat file directly to store memories in Supabase.</p>
-            <form action="/api/upload-chat" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" accept=".txt" required>
-                <button type="submit">Process & Save to Supabase</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    """
-
-# 6. WHATSAPP CHAT PROCESSOR ENDPOINT
-@app.post("/api/upload-chat")
-async def process_chat_file(request: Request):
-    if not hasattr(brain, 'SessionLocal') or not brain.db_active:
-        return JSONResponse({"error": "Database not connected. Check DATABASE_URL in Render settings."}, status_code=500)
-    
-    form = await request.form()
-    uploaded_file = form.get("file")
-    
-    if not uploaded_file:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-        
-    contents = await uploaded_file.read()
-    text_content = contents.decode("utf-8", errors="ignore")
-    lines = text_content.splitlines()
-
-    session = brain.SessionLocal()
-    memories_to_insert = []
-    last_sana_msg = None
-    pattern = re.compile(r"^\[?.*?\]?\s*([^:]+):\s*(.+)$")
-
-    for line in lines:
-        line = line.strip()
-        match = pattern.search(line)
-        if match:
-            sender = match.group(1).lower()
-            text = match.group(2).strip()
-
-            if any(w in text.lower() for w in ["omitted", "end-to-end", "call"]):
+    async with httpx.AsyncClient() as client:
+        for api_id, name, func in providers:
+            try:
+                reply = await func(client, req.message)
+                latency = round((time.time() - start_time) * 1000)
+                return {
+                    "status": "success",
+                    "active_api": api_id,
+                    "provider": name,
+                    "reply": reply,
+                    "latency": f"{latency}ms"
+                }
+            except Exception as e:
+                print(f"[Failover Engine] {api_id} ({name}) failed: {e}")
                 continue
 
-            if "sana" in sender:
-                last_sana_msg = text
-            elif ("abdullah" in sender or "you" in sender) and last_sana_msg:
-                memories_to_insert.append(
-                    LiveMemory(
-                        prompt=f"Sana: {last_sana_msg}",
-                        completion=f"Abdullah: {text}"
-                    )
-                )
-                last_sana_msg = None
-
-    total = len(memories_to_insert)
-    if total > 0:
-        batch_size = 500
-        for i in range(0, total, batch_size):
-            batch = memories_to_insert[i:i + batch_size]
-            session.bulk_save_objects(batch)
-            session.commit()
-        session.close()
-        return {"status": "Success", "message": f"Successfully stored {total} chat memories into Supabase!"}
-    
-    session.close()
-    return {"status": "Warning", "message": "No matching conversation pairs found. Ensure speaker names in chat.txt include Sana and Abdullah."}
+    raise HTTPException(
+        status_code=500,
+        detail="All 5 API services failed or had unconfigured keys."
+    )
     
