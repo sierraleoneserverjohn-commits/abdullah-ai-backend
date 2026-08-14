@@ -1,61 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Johnny Tec AI - 5 API Master Control Panel</title>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --card-bg: #151c2c;
+            --card-border: #222f46;
+            --accent: #3b82f6;
+            --green: #10b981;
+            --red: #ef4444;
+            --yellow: #f59e0b;
+            --gray: #64748b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 15px; }
+        .container { max-width: 850px; margin: 0 auto; }
+
+        /* Header & Title */
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { font-size: 1.6rem; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .header p { color: var(--gray); font-size: 0.85rem; margin-top: 4px; }
+
+        /* Cards & Grid */
+        .card { background: var(--card-bg); border: 1px solid var(--card-border); padding: 18px; border-radius: 12px; margin-bottom: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+        .stat-box { background: rgba(34, 47, 70, 0.4); border: 1px solid var(--card-border); padding: 14px; border-radius: 10px; text-align: center; position: relative; }
+
+        /* Status Badges & Lights */
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .dot-red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+        .dot-yellow { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+
+        .token-text { color: var(--green); font-weight: bold; font-size: 1.5rem; margin: 4px 0; }
+        
+        /* Progress Bar */
+        .progress-container { background: #1e293b; border-radius: 6px; height: 8px; width: 100%; margin-top: 8px; overflow: hidden; }
+        .progress-bar { background: var(--green); height: 100%; width: 0%; transition: width 0.5s ease; }
+
+        /* API Dashboard Cards */
+        .api-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+        .api-card { background: #0f172a; border: 1px solid var(--card-border); padding: 12px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid var(--gray); transition: all 0.2s; }
+        .api-card:hover { transform: translateY(-1px); }
+        .api-info strong { font-size: 0.95rem; color: #fff; }
+        .api-info small { color: var(--gray); display: block; font-size: 0.78rem; margin-top: 2px; }
+
+        /* Chat Window */
+        .chat-box { height: 320px; overflow-y: auto; background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--card-border); display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px 14px; border-radius: 10px; max-width: 80%; line-height: 1.4; font-size: 0.9rem; word-wrap: break-word; }
+        .sana { background: var(--accent); align-self: flex-end; border-bottom-right-radius: 2px; }
+        .abdullah { background: #222f46; align-self: flex-start; border-bottom-left-radius: 2px; }
+
+        /* Controls & Form Elements */
+        .input-group { display: flex; gap: 8px; }
+        input, select { padding: 12px; border-radius: 8px; border: 1px solid var(--card-border); background: #0f172a; color: white; font-size: 14px; outline: none; }
+        input { flex: 1; }
+        input:focus { border-color: var(--accent); }
+        
+        .btn { padding: 10px 18px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .btn:hover { background: #2563eb; }
+        .btn:disabled { background: var(--gray); cursor: not-allowed; }
+        .btn-ping { background: #1e293b; border: 1px solid var(--card-border); padding: 6px 12px; font-size: 0.75rem; margin-top: 6px; }
+        .btn-ping:hover { background: #334155; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h2>⚡ Johnny Tec Control Panel</h2>
+            <p>5-Provider Multi-API Auto Failover Engine</p>
+        </div>
+
+        <!-- STATS GRID -->
+        <div class="stats-grid">
+            <div class="stat-box">
+                <small style="color: var(--gray);">Combined Tokens Used</small>
+                <div class="token-text" id="global-tokens">0</div>
+                <small style="color: #cbd5e1;">Remaining: <span id="global-remaining">Loading...</span></small>
+                <div class="progress-container">
+                    <div class="progress-bar" id="token-bar"></div>
+                </div>
+            </div>
+
+            <div class="stat-box">
+                <small style="color: var(--gray);">Frontend ↔ Backend Link</small>
+                <div id="connection-status" style="font-weight: bold; font-size: 1rem; margin: 6px 0; color: var(--yellow);">
+                    <span class="status-dot dot-yellow"></span> Connecting...
+                </div>
+                <small style="color: #cbd5e1;">Active APIs: <span id="working-count" style="font-weight: bold; color: var(--green);">0</span> / 5</small>
+                <br>
+                <button class="btn btn-ping" onclick="updateDashboard()"><i class="fa-solid fa-rotate-right"></i> Ping Backend</button>
+            </div>
+        </div>
+
+        <!-- API PROVIDERS PANEL -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="font-size: 1rem; color: #fff;"><i class="fa-solid fa-network-wired"></i> 5-API Architecture Engine</h3>
+                <span id="ping-time" style="font-size: 0.75rem; color: var(--gray);">Latency: --ms</span>
+            </div>
+
+            <label for="apiSelect" style="font-size: 0.8rem; color: var(--gray);">Manual Override Route:</label>
+            <select id="apiSelect" style="width: 100%; margin-top: 4px; margin-bottom: 12px;">
+                <option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>
+            </select>
+
+            <div class="api-list" id="api-list">
+                <!-- Javascript will populate all 5 cards here -->
+            </div>
+        </div>
+
+        <!-- LIVE CHAT SIMULATOR -->
+        <div class="card">
+            <h3 style="font-size: 1rem; margin-bottom: 12px; color: #fff;"><i class="fa-solid fa-comments"></i> Live Chat Simulator</h3>
+            <div class="chat-box" id="chatbox"></div>
+            <div class="input-group">
+                <input type="text" id="userInput" placeholder="Type a message as Sana..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button class="btn" onclick="sendMessage()" id="sendBtn"><i class="fa-solid fa-paper-plane"></i> Send</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // 🔑 Set your exact Render Backend URL here:
+        // 🔑 YOUR EXPLICIT RENDER BACKEND URL
         const BACKEND_URL = "https://abdullah-ai-backend.onrender.com";
 
+        // Default 5 API Blueprint (Guarantees all 5 are displayed regardless of network status)
+        const DEFAULT_APIS = [
+            { id: "API_1", provider: "Groq", model: "llama-3.3-70b-versatile" },
+            { id: "API_2", provider: "Cerebras", model: "llama3.3-70b" },
+            { id: "API_3", provider: "Gemini", model: "gemini-2.5-flash" },
+            { id: "API_4", provider: "OpenRouter", model: "meta-llama/llama-3.3-70b" },
+            { id: "API_5", provider: "DeepSeek", model: "deepseek-chat" }
+        ];
+
         async function updateDashboard() {
+            const startTime = Date.now();
+            const statusBox = document.getElementById('connection-status');
+            const pingLabel = document.getElementById('ping-time');
+
             try {
-                const response = await fetch(`${BACKEND_URL}/dashboard`);
-                if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+                const response = await fetch(`${BACKEND_URL}/dashboard`, { cache: "no-store" });
+                const latency = Date.now() - startTime;
+                pingLabel.innerText = `Latency: ${latency}ms`;
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
                 const data = await response.json();
 
-                document.getElementById('connection-status').innerText = "Connected & Working 🟢";
-                document.getElementById('connection-status').style.color = "#10b981";
+                // 1. Update Connection Status
+                statusBox.innerHTML = `<span class="status-dot dot-green"></span> Connected (${latency}ms)`;
+                statusBox.style.color = "var(--green)";
 
-                document.getElementById('global-tokens').innerText = (data.combined_tokens_used || 0).toLocaleString();
-                document.getElementById('global-remaining').innerText = (data.combined_tokens_remaining || 0).toLocaleString();
+                // 2. Update Token Counters
+                const used = data.combined_tokens_used || 0;
+                const remaining = data.combined_tokens_remaining || 0;
+                const capacity = used + remaining || 1;
+                const usedPercentage = Math.min(100, Math.round((used / capacity) * 100));
+
+                document.getElementById('global-tokens').innerText = used.toLocaleString();
+                document.getElementById('global-remaining').innerText = remaining.toLocaleString();
                 document.getElementById('working-count').innerText = data.connected_apis || 0;
+                document.getElementById('token-bar').style.width = `${usedPercentage}%`;
 
-                const apiList = document.getElementById('api-list');
-                const apiSelect = document.getElementById('apiSelect');
-                
-                const currentSelection = apiSelect.value;
-                apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
-                apiList.innerHTML = '';
-
-                if (data.api_breakdown && Array.isArray(data.api_breakdown)) {
-                    data.api_breakdown.forEach(api => {
-                        apiSelect.innerHTML += `<option value="${api.id}">Force Route: ${api.id} (${api.provider})</option>`;
-
-                        let color = "#ef4444"; 
-                        if (api.status === "Connected & Active") color = "#10b981"; 
-                        if (api.status === "Awaiting API Key") color = "#64748b"; 
-                        if (api.status === "Rate Limited") color = "#f59e0b";
-
-                        apiList.innerHTML += `
-                            <div class="api-item" style="border-left-color: ${color};">
-                                <div>
-                                    <strong>${api.id}</strong> <span style="color: #3b82f6; font-size: 0.8rem;">[${api.provider}]</span>
-                                    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 3px;">
-                                        Tokens Used: ${api.tokens_used.toLocaleString()} | Remaining: ${api.remaining.toLocaleString()}
-                                    </div>
-                                </div>
-                                <div style="color: ${color}; font-weight: bold; font-size: 0.85rem;">
-                                    ${api.status}
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
-
-                apiSelect.value = currentSelection;
+                // 3. Render 5 API Breakdown Cards
+                renderApiCards(data.api_breakdown);
 
             } catch (err) {
-                console.error("Dashboard Fetch Error:", err);
-                document.getElementById('connection-status').innerText = "Disconnected 🔴";
-                document.getElementById('connection-status').style.color = "#ef4444";
-                document.getElementById('api-list').innerHTML = `<p style="text-align: center; color: #ef4444; margin: 10px 0;">Backend Network Error. Is Render awake?</p>`;
+                console.error("Dashboard Sync Error:", err);
+                statusBox.innerHTML = `<span class="status-dot dot-red"></span> Disconnected`;
+                statusBox.style.color = "var(--red)";
+                pingLabel.innerText = "Latency: Offline";
+
+                // Render Offline Cards for all 5 APIs
+                renderApiCards(null);
             }
+        }
+
+        function renderApiCards(apiData) {
+            const apiList = document.getElementById('api-list');
+            const apiSelect = document.getElementById('apiSelect');
+            
+            const currentSelection = apiSelect.value;
+            apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
+            apiList.innerHTML = '';
+
+            DEFAULT_APIS.forEach((defaultApi, index) => {
+                // Merge with actual backend data if available
+                const realData = apiData ? apiData.find(a => a.id === defaultApi.id) : null;
+
+                const status = realData ? realData.status : "Server Unreachable";
+                const tokensUsed = realData ? realData.tokens_used : 0;
+                const remaining = realData ? realData.remaining : 0;
+
+                let dotClass = "dot-red";
+                let borderColor = "var(--red)";
+                let statusColor = "var(--red)";
+
+                if (status === "Connected & Active") {
+                    dotClass = "dot-green";
+                    borderColor = "var(--green)";
+                    statusColor = "var(--green)";
+                } else if (status === "Awaiting API Key" || status === "Rate Limited") {
+                    dotClass = "dot-yellow";
+                    borderColor = "var(--yellow)";
+                    statusColor = "var(--yellow)";
+                }
+
+                // Add to Select Dropdown
+                apiSelect.innerHTML += `<option value="${defaultApi.id}">Force Route: ${defaultApi.id} (${defaultApi.provider})</option>`;
+
+                // Render Card
+                apiList.innerHTML += `
+                    <div class="api-card" style="border-left-color: ${borderColor};">
+                        <div class="api-info">
+                            <strong><span class="status-dot ${dotClass}"></span>${defaultApi.id}: ${defaultApi.provider}</strong>
+                            <small>Model: ${defaultApi.model} | Used: ${tokensUsed.toLocaleString()} tokens</small>
+                        </div>
+                        <div style="color: ${statusColor}; font-weight: bold; font-size: 0.8rem; text-align: right;">
+                            ${status}
+                        </div>
+                    </div>
+                `;
+            });
+
+            apiSelect.value = currentSelection;
         }
 
         async function sendMessage() {
@@ -66,7 +243,7 @@
             const text = input.value.trim();
             if (!text) return;
 
-            // Render Sana's message
+            // Render User Message
             chatbox.innerHTML += `<div class="msg sana">${escapeHtml(text)}</div>`;
             input.value = '';
             chatbox.scrollTop = chatbox.scrollHeight;
@@ -90,30 +267,25 @@
                     chatbox.innerHTML += `
                         <div class="msg abdullah">
                             ${escapeHtml(data.reply || "No response received.")}
-                            <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 5px; text-align: right;">
+                            <div style="font-size: 0.7rem; color: var(--gray); margin-top: 5px; text-align: right;">
                                 ⚡ Routed via ${data.provider || "Auto Engine"}
                             </div>
                         </div>`;
                 } else {
-                    chatbox.innerHTML += `<div class="msg abdullah" style="color:#ef4444;">⚠️ Error: ${escapeHtml(data.detail || "Server error")}</div>`;
+                    chatbox.innerHTML += `<div class="msg abdullah" style="color:var(--red);">⚠️ Error: ${escapeHtml(data.detail || "Server error")}</div>`;
                 }
 
-                chatbox.scrollTop = chatbox.scrollHeight;
-
-                // Refresh Metrics
-                updateDashboard();
-
             } catch (error) {
-                chatbox.innerHTML += `<div class="msg abdullah" style="color:#ef4444;">⚠️ Network Error sending message.</div>`;
+                chatbox.innerHTML += `<div class="msg abdullah" style="color:var(--red);">⚠️ Network Error: Unable to reach backend server.</div>`;
             } finally {
+                chatbox.scrollTop = chatbox.scrollHeight;
                 input.disabled = false;
                 sendBtn.disabled = false;
                 input.focus();
+                
+                // Refresh Dashboard Metrics
+                updateDashboard();
             }
-        }
-
-        function handleKeyPress(e) {
-            if (e.key === 'Enter') sendMessage();
         }
 
         function escapeHtml(text) {
@@ -122,6 +294,11 @@
             return div.innerHTML;
         }
 
-        window.onload = updateDashboard;
+        // Auto-run dashboard check on page load and refresh every 15 seconds
+        window.onload = () => {
+            updateDashboard();
+            setInterval(updateDashboard, 15000);
+        };
     </script>
-    
+</body>
+</html>
