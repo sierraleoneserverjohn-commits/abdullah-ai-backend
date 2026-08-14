@@ -1,0 +1,12 @@
+[
+  {
+    "id": 1,
+    "type": "preference",
+    "message": "Sana likes being called by her name."
+  },
+  {
+    "id": 2,
+    "type": "important",
+    "message": "Sana wants Abdullah to speak naturally with her."
+  }
+]
