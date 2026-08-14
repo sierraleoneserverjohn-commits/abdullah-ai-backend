@@ -1,9 +1,7 @@
 fastapi
 uvicorn
 pydantic
-groq
-google-generativeai
+httpx
 sqlalchemy
 psycopg2-binary
-psycopg2-binary
-python-multipart
+gunicorn
