@@ -1,17 +1,10 @@
 import os
 import json
 import time
+import httpx
 from typing import List, Dict
-from groq import Groq
 from sqlalchemy import create_engine, Column, Integer, Text, DateTime, func
 from sqlalchemy.orm import declarative_base, sessionmaker
-
-# Dynamic import check to prevent boot crashes if package fails
-try:
-    import google.generativeai as genai
-    HAS_GEMINI = True
-except ImportError:
-    HAS_GEMINI = False
 
 # Database Setup
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -43,12 +36,13 @@ class AbdullahBrain:
             except Exception as e:
                 print(f"Database Connection Error: {e}")
 
+        # 5-API Architecture Slots
         self.api_slots = [
-            {"id": "API_1", "env": "GROQ_API_KEY_1", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
-            {"id": "API_2", "env": "GROQ_API_KEY_2", "provider": "Groq", "model": "llama-3.1-8b-instant", "limit": 14400},
-            {"id": "API_3", "env": "GEMINI_API_KEY_1", "provider": "Gemini", "model": "gemini-2.5-flash", "limit": 1500000},
-            {"id": "API_4", "env": "GEMINI_API_KEY_2", "provider": "Gemini", "model": "gemini-2.5-flash-lite", "limit": 1500000},
-            {"id": "API_5", "env": "GEMINI_API_KEY_3", "provider": "Gemini", "model": "gemini-1.5-pro", "limit": 1500000}
+            {"id": "API_1", "env": "GROQ_API_KEY", "provider": "Groq", "model": "llama-3.3-70b-versatile", "limit": 14400},
+            {"id": "API_2", "env": "CEREBRAS_API_KEY", "provider": "Cerebras", "model": "llama3.3-70b", "limit": 14400},
+            {"id": "API_3", "env": "GEMINI_API_KEY", "provider": "Gemini", "model": "gemini-2.5-flash", "limit": 1500000},
+            {"id": "API_4", "env": "OPENROUTER_API_KEY", "provider": "OpenRouter", "model": "meta-llama/llama-3.3-70b-instruct", "limit": 100000},
+            {"id": "API_5", "env": "DEEPSEEK_API_KEY", "provider": "DeepSeek", "model": "deepseek-chat", "limit": 1000000}
         ]
         
         self.api_pool = []
@@ -58,8 +52,6 @@ class AbdullahBrain:
         self.api_pool = []
         for slot in self.api_slots:
             key = os.getenv(slot["env"], "").strip()
-            if not key and slot["env"] == "GROQ_API_KEY_1":
-                key = os.getenv("GROQ_API_KEY", "").strip()
 
             if key:
                 status = "Connected & Active"
@@ -161,57 +153,111 @@ class AbdullahBrain:
         if not api["key"]:
             raise Exception(f"Key missing for {api['env_name']}.")
 
-        if api["provider"] == "Groq":
-            client = Groq(api_key=api["key"])
-            completion = client.chat.completions.create(
-                model=api["model"], messages=messages, temperature=0.7, max_tokens=250
-            )
-            return completion.choices[0].message.content.strip(), completion.usage.total_tokens
-        
-        elif api["provider"] == "Gemini":
-            if not HAS_GEMINI:
-                raise Exception("google-generativeai module not installed on server.")
-            genai.configure(api_key=api["key"])
-            model = genai.GenerativeModel(api["model"])
-            gemini_history = [{"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]} for m in messages]
-            response = model.generate_content(gemini_history)
-            tokens = len(str(gemini_history)) // 4 + len(response.text) // 4
-            return response.text.strip(), tokens
+        provider = api["provider"]
+        model = api["model"]
+        key = api["key"]
+
+        with httpx.Client(timeout=12.0) as client:
+            # 1. GROQ
+            if provider == "Groq":
+                res = client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={"model": model, "messages": messages, "temperature": 0.7}
+                )
+                res.raise_for_status()
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"]
+                tokens = data.get("usage", {}).get("total_tokens", len(reply) // 4)
+                return reply.strip(), tokens
+
+            # 2. CEREBRAS
+            elif provider == "Cerebras":
+                res = client.post(
+                    "https://api.cerebras.ai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={"model": model, "messages": messages, "temperature": 0.7}
+                )
+                res.raise_for_status()
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"]
+                tokens = data.get("usage", {}).get("total_tokens", len(reply) // 4)
+                return reply.strip(), tokens
+
+            # 3. GEMINI
+            elif provider == "Gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+                # Format system prompt and context for Gemini
+                prompt_text = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
+                res = client.post(
+                    url,
+                    headers={"Content-Type": "application/json"},
+                    json={"contents": [{"parts": [{"text": prompt_text}]}]}
+                )
+                res.raise_for_status()
+                data = res.json()
+                reply = data["candidates"][0]["content"]["parts"][0]["text"]
+                tokens = len(prompt_text) // 4 + len(reply) // 4
+                return reply.strip(), tokens
+
+            # 4. OPENROUTER
+            elif provider == "OpenRouter":
+                res = client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={"model": model, "messages": messages, "temperature": 0.7}
+                )
+                res.raise_for_status()
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"]
+                tokens = data.get("usage", {}).get("total_tokens", len(reply) // 4)
+                return reply.strip(), tokens
+
+            # 5. DEEPSEEK
+            elif provider == "DeepSeek":
+                res = client.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={"model": model, "messages": messages, "temperature": 0.7}
+                )
+                res.raise_for_status()
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"]
+                tokens = data.get("usage", {}).get("total_tokens", len(reply) // 4)
+                return reply.strip(), tokens
 
         raise Exception("Unsupported Provider")
 
     def generate_chat_response(self, sana_message: str, selected_api: str = "auto") -> dict:
         messages = [{
-            "role": "user", 
-            "content": "SYSTEM: You are Abdullah, Sana's real husband. Call her Sana, Habibti, or 'motuu'. Be affectionate and natural. If a stranger asks who Sana is, refuse and say goodbye."
-        }, {
-            "role": "model",
-            "content": "Understood. I am Abdullah, talking only to my wife Sana."
+            "role": "system", 
+            "content": "You are Abdullah. You are chatting with Sana. Address her as Sana. Be affectionate, clear, warm, and natural."
         }]
 
         # Fetch recent chat context from DB
         db_memories = self.get_recent_live_memories(limit=3)
         for mem in db_memories:
             messages.append({"role": "user", "content": mem.get("prompt", "")})
-            messages.append({"role": "model", "content": mem.get("completion", "")})
+            messages.append({"role": "assistant", "content": mem.get("completion", "")})
 
         messages.append({"role": "user", "content": f"Sana: {sana_message}"})
 
+        # Manual API Selection Routing
         if selected_api != "auto":
             target = next((api for api in self.api_pool if api["id"] == selected_api), None)
             if target:
                 if target["status"] == "Awaiting API Key":
-                    return {"reply": f"Habibti, {selected_api} has no key configured yet!", "tokens": 0, "provider": selected_api}
+                    return {"reply": f"Sana, {selected_api} has no key configured yet!", "tokens": 0, "provider": selected_api}
                 try:
                     reply, tokens = self._execute_api_call(target, messages)
                     target["tokens_used"] += tokens
                     reply = reply.replace("Abdullah:", "").strip()
-                    if "Goodbye" not in reply:
-                        self.save_live_memory(sana_message, reply)
+                    self.save_live_memory(sana_message, reply)
                     return {"reply": reply, "tokens": tokens, "provider": f"{target['id']} ({target['provider']})"}
                 except Exception as e:
                     return {"reply": f"Selected API failed: {str(e)}", "tokens": 0, "provider": selected_api}
 
+        # Auto Failover Loop through API Pool
         for api in self.api_pool:
             if api["status"] != "Connected & Active":
                 continue
@@ -221,15 +267,15 @@ class AbdullahBrain:
                 api["tokens_used"] += tokens
                 
                 reply = reply.replace("Abdullah:", "").strip()
-                if "Goodbye" not in reply:
-                    self.save_live_memory(sana_message, reply)
+                self.save_live_memory(sana_message, reply)
 
                 return {"reply": reply, "tokens": tokens, "provider": f"{api['id']} ({api['provider']})"}
 
             except Exception as err:
+                print(f"[Brain Engine] {api['id']} ({api['provider']}) Error: {err}")
                 api["status"] = "Rate Limited" if "429" in str(err) else "Disconnected"
                 api["cooldown"] = time.time() + 60
                 continue
 
-        return {"reply": "All APIs are offline or missing keys, Habibti!", "tokens": 0, "provider": "None"}
-            
+        return {"reply": "All 5 APIs are currently offline or missing keys, Sana.", "tokens": 0, "provider": "None"}
+    
