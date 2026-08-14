@@ -21,12 +21,24 @@ class ChatRequest(BaseModel):
     message: str
     selected_api: str = "auto"
 
-# 🔑 Load API Keys from Environment Variables
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+# 🔑 5-Provider Architecture Configuration & Limits
+PROVIDERS_CONFIG = [
+    {"id": "API_1", "env": "GROQ_API_KEY", "provider": "Groq", "model": "llama-3.3-70b-versatile", "limit": 14400},
+    {"id": "API_2", "env": "CEREBRAS_API_KEY", "provider": "Cerebras", "model": "llama3.3-70b", "limit": 14400},
+    {"id": "API_3", "env": "GEMINI_API_KEY", "provider": "Gemini", "model": "gemini-2.5-flash", "limit": 1500000},
+    {"id": "API_4", "env": "OPENROUTER_API_KEY", "provider": "OpenRouter", "model": "meta-llama/llama-3.3-70b-instruct", "limit": 100000},
+    {"id": "API_5", "env": "DEEPSEEK_API_KEY", "provider": "DeepSeek", "model": "deepseek-chat", "limit": 1000000},
+]
+
+# Real-time state tracker for tokens and provider health
+PROVIDER_STATS = {
+    p["id"]: {
+        "tokens_used": 0,
+        "status": "Connected & Active" if os.getenv(p["env"]) else "Awaiting API Key",
+        "cooldown": 0
+    }
+    for p in PROVIDERS_CONFIG
+}
 
 # 1. HOME ROUTE
 @app.get("/", response_class=HTMLResponse)
@@ -35,102 +47,156 @@ def serve_home():
         return FileResponse("index.html")
     return "<h1>Abdullah AI 5-Engine Active</h1>"
 
-# 2. DASHBOARD STATUS ROUTE
+# 2. DASHBOARD STATUS ROUTE (Provides real-time stats to index.html)
 @app.get("/dashboard")
 @app.get("/api/dashboard")
 def get_dashboard():
-    keys = {
-        "Groq": bool(GROQ_API_KEY),
-        "Cerebras": bool(CEREBRAS_API_KEY),
-        "Gemini": bool(GEMINI_API_KEY),
-        "OpenRouter": bool(OPENROUTER_API_KEY),
-        "DeepSeek": bool(DEEPSEEK_API_KEY),
-    }
-    active_count = sum(keys.values())
+    current_time = time.time()
+    api_breakdown = []
+    total_used = 0
+    total_capacity = 0
+    connected_count = 0
+
+    for p in PROVIDERS_CONFIG:
+        p_id = p["id"]
+        env_key = os.getenv(p["env"])
+        stats = PROVIDER_STATS[p_id]
+
+        # Dynamic Status Evaluation
+        if env_key and stats["status"] == "Awaiting API Key":
+            stats["status"] = "Connected & Active"
+        elif not env_key:
+            stats["status"] = "Awaiting API Key"
+
+        if stats["status"] == "Rate Limited" and current_time > stats["cooldown"]:
+            stats["status"] = "Connected & Active"
+
+        if stats["status"] == "Connected & Active":
+            connected_count += 1
+
+        used = stats["tokens_used"]
+        remaining = max(0, p["limit"] - used)
+        total_used += used
+        total_capacity += p["limit"]
+
+        api_breakdown.append({
+            "id": p_id,
+            "provider": p["provider"],
+            "env_name": p["env"],
+            "model": p["model"],
+            "status": stats["status"],
+            "tokens_used": used,
+            "remaining": remaining
+        })
+
     return {
         "status": "Connected & Working",
-        "active_apis": f"{active_count} / 5",
-        "providers_configured": keys
+        "connected_apis": connected_count,
+        "total_apis": 5,
+        "combined_tokens_used": total_used,
+        "combined_tokens_remaining": max(0, total_capacity - total_used),
+        "api_breakdown": api_breakdown
     }
 
 # -------------------------------------------------------------
-# ⚡ 5-PROVIDER ASYNC FETCH FUNCTIONS
+# ⚡ 5-PROVIDER ASYNC FETCH FUNCTIONS WITH TOKEN EXTRACTORS
 # -------------------------------------------------------------
-async def call_groq(client: httpx.AsyncClient, message: str) -> str:
-    if not GROQ_API_KEY:
+async def call_groq(client: httpx.AsyncClient, message: str) -> tuple[str, int]:
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
         raise ValueError("GROQ_API_KEY not configured")
     res = await client.post(
         "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
             "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": message}]
         },
-        timeout=10.0
+        timeout=12.0
     )
     res.raise_for_status()
-    return res.json()["choices"][0]["message"]["content"]
+    data = res.json()
+    reply = data["choices"][0]["message"]["content"]
+    tokens = data.get("usage", {}).get("total_tokens", (len(message) + len(reply)) // 4)
+    return reply, tokens
 
-async def call_cerebras(client: httpx.AsyncClient, message: str) -> str:
-    if not CEREBRAS_API_KEY:
+async def call_cerebras(client: httpx.AsyncClient, message: str) -> tuple[str, int]:
+    key = os.getenv("CEREBRAS_API_KEY")
+    if not key:
         raise ValueError("CEREBRAS_API_KEY not configured")
     res = await client.post(
         "https://api.cerebras.ai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {CEREBRAS_API_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
             "model": "llama3.3-70b",
             "messages": [{"role": "user", "content": message}]
         },
-        timeout=10.0
+        timeout=12.0
     )
     res.raise_for_status()
-    return res.json()["choices"][0]["message"]["content"]
+    data = res.json()
+    reply = data["choices"][0]["message"]["content"]
+    tokens = data.get("usage", {}).get("total_tokens", (len(message) + len(reply)) // 4)
+    return reply, tokens
 
-async def call_gemini(client: httpx.AsyncClient, message: str) -> str:
-    if not GEMINI_API_KEY:
+async def call_gemini(client: httpx.AsyncClient, message: str) -> tuple[str, int]:
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
         raise ValueError("GEMINI_API_KEY not configured")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
     res = await client.post(
         url,
         headers={"Content-Type": "application/json"},
         json={"contents": [{"parts": [{"text": message}]}]},
-        timeout=10.0
+        timeout=12.0
     )
     res.raise_for_status()
-    return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+    data = res.json()
+    reply = data["candidates"][0]["content"]["parts"][0]["text"]
+    usage = data.get("usageMetadata", {})
+    tokens = usage.get("totalTokenCount", (len(message) + len(reply)) // 4)
+    return reply, tokens
 
-async def call_openrouter(client: httpx.AsyncClient, message: str) -> str:
-    if not OPENROUTER_API_KEY:
+async def call_openrouter(client: httpx.AsyncClient, message: str) -> tuple[str, int]:
+    key = os.getenv("OPENROUTER_API_KEY")
+    if not key:
         raise ValueError("OPENROUTER_API_KEY not configured")
     res = await client.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
             "model": "meta-llama/llama-3.3-70b-instruct",
             "messages": [{"role": "user", "content": message}]
         },
-        timeout=10.0
+        timeout=12.0
     )
     res.raise_for_status()
-    return res.json()["choices"][0]["message"]["content"]
+    data = res.json()
+    reply = data["choices"][0]["message"]["content"]
+    tokens = data.get("usage", {}).get("total_tokens", (len(message) + len(reply)) // 4)
+    return reply, tokens
 
-async def call_deepseek(client: httpx.AsyncClient, message: str) -> str:
-    if not DEEPSEEK_API_KEY:
+async def call_deepseek(client: httpx.AsyncClient, message: str) -> tuple[str, int]:
+    key = os.getenv("DEEPSEEK_API_KEY")
+    if not key:
         raise ValueError("DEEPSEEK_API_KEY not configured")
     res = await client.post(
         "https://api.deepseek.com/chat/completions",
-        headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": message}]
         },
-        timeout=10.0
+        timeout=12.0
     )
     res.raise_for_status()
-    return res.json()["choices"][0]["message"]["content"]
+    data = res.json()
+    reply = data["choices"][0]["message"]["content"]
+    tokens = data.get("usage", {}).get("total_tokens", (len(message) + len(reply)) // 4)
+    return reply, tokens
 
 # -------------------------------------------------------------
-# 3. CHAT ROUTE (5-API AUTO FAILOVER PIPELINE)
+# 3. CHAT ROUTE (SMART MANUAL OVERRIDE + AUTO FAILOVER PIPELINE)
 # -------------------------------------------------------------
 @app.post("/chat")
 @app.post("/api/chat")
@@ -147,20 +213,35 @@ async def process_chat(req: ChatRequest):
         ("API_5", "DeepSeek", call_deepseek),
     ]
 
+    # Handle Manual Override Routing if specified
+    selected = req.selected_api.lower()
+    if selected != "auto":
+        providers = [p for p in providers if p[0].lower() == selected or p[1].lower() in selected] + \
+                    [p for p in providers if p[0].lower() != selected and p[1].lower() not in selected]
+
     async with httpx.AsyncClient() as client:
         for api_id, name, func in providers:
             try:
-                reply = await func(client, req.message)
+                reply, tokens = await func(client, req.message)
                 latency = round((time.time() - start_time) * 1000)
+
+                # Record Tokens Used in Global Tracker
+                PROVIDER_STATS[api_id]["tokens_used"] += tokens
+                PROVIDER_STATS[api_id]["status"] = "Connected & Active"
+
                 return {
                     "status": "success",
                     "active_api": api_id,
                     "provider": name,
+                    "provider_used": name,
                     "reply": reply,
+                    "tokens": tokens,
                     "latency": f"{latency}ms"
                 }
             except Exception as e:
                 print(f"[Failover Engine] {api_id} ({name}) failed: {e}")
+                PROVIDER_STATS[api_id]["status"] = "Rate Limited" if "429" in str(e) else "Error"
+                PROVIDER_STATS[api_id]["cooldown"] = time.time() + 60
                 continue
 
     raise HTTPException(
