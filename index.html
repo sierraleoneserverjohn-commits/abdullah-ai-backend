@@ -130,16 +130,16 @@
     </div>
 
     <script>
-        // 🔑 YOUR EXPLICIT RENDER BACKEND URL
+        // 🔑 EXPLICIT RENDER BACKEND URL
         const BACKEND_URL = "https://abdullah-ai-backend.onrender.com";
 
-        // Default 5 API Blueprint (Guarantees all 5 are displayed regardless of network status)
-        const DEFAULT_APIS = [
-            { id: "API_1", provider: "Groq", model: "llama-3.3-70b-versatile" },
-            { id: "API_2", provider: "Cerebras", model: "llama3.3-70b" },
-            { id: "API_3", provider: "Gemini", model: "gemini-2.5-flash" },
-            { id: "API_4", provider: "OpenRouter", model: "meta-llama/llama-3.3-70b" },
-            { id: "API_5", provider: "DeepSeek", model: "deepseek-chat" }
+        // Standard 5 Provider Master List
+        const PROVIDERS = [
+            { key: "groq", id: "API_1", name: "Groq", model: "llama-3.3-70b-versatile" },
+            { key: "cerebras", id: "API_2", name: "Cerebras", model: "llama3.3-70b" },
+            { key: "gemini", id: "API_3", name: "Gemini", model: "gemini-2.5-flash" },
+            { key: "openrouter", id: "API_4", name: "OpenRouter", model: "meta-llama/llama-3.3-70b" },
+            { key: "deepseek", id: "API_5", name: "DeepSeek", model: "deepseek-chat" }
         ];
 
         async function updateDashboard() {
@@ -150,37 +150,38 @@
             try {
                 const response = await fetch(`${BACKEND_URL}/dashboard`, { cache: "no-store" });
                 const latency = Date.now() - startTime;
-                pingLabel.innerText = `Latency: ${latency}ms`;
+                if (pingLabel) pingLabel.innerText = `Latency: ${latency}ms`;
 
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
                 const data = await response.json();
 
-                // 1. Update Connection Status
+                // 1. Connection Status
                 statusBox.innerHTML = `<span class="status-dot dot-green"></span> Connected (${latency}ms)`;
                 statusBox.style.color = "var(--green)";
 
-                // 2. Update Token Counters
-                const used = data.combined_tokens_used || 0;
-                const remaining = data.combined_tokens_remaining || 0;
-                const capacity = used + remaining || 1;
+                // 2. Global Token Counters
+                const used = data.combined_tokens_used || data.total_tokens_used || 0;
+                const remaining = data.combined_tokens_remaining || data.total_tokens_remaining || 0;
+                const capacity = (used + remaining) || 1;
                 const usedPercentage = Math.min(100, Math.round((used / capacity) * 100));
 
                 document.getElementById('global-tokens').innerText = used.toLocaleString();
                 document.getElementById('global-remaining').innerText = remaining.toLocaleString();
-                document.getElementById('working-count').innerText = data.connected_apis || 0;
-                document.getElementById('token-bar').style.width = `${usedPercentage}%`;
+                document.getElementById('working-count').innerText = data.connected_apis ?? data.active_apis ?? 0;
+                
+                const bar = document.getElementById('token-bar');
+                if (bar) bar.style.width = `${usedPercentage}%`;
 
-                // 3. Render 5 API Breakdown Cards
-                renderApiCards(data.api_breakdown);
+                // 3. Render 5 API Cards
+                renderApiCards(data.api_breakdown || data.apis);
 
             } catch (err) {
                 console.error("Dashboard Sync Error:", err);
                 statusBox.innerHTML = `<span class="status-dot dot-red"></span> Disconnected`;
                 statusBox.style.color = "var(--red)";
-                pingLabel.innerText = "Latency: Offline";
+                if (pingLabel) pingLabel.innerText = "Latency: Offline";
 
-                // Render Offline Cards for all 5 APIs
                 renderApiCards(null);
             }
         }
@@ -193,37 +194,51 @@
             apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
             apiList.innerHTML = '';
 
-            DEFAULT_APIS.forEach((defaultApi, index) => {
-                // Merge with actual backend data if available
-                const realData = apiData ? apiData.find(a => a.id === defaultApi.id) : null;
+            PROVIDERS.forEach((p, index) => {
+                let realData = null;
+                if (Array.isArray(apiData)) {
+                    realData = apiData.find(item => {
+                        const itemId = String(item.id || '').toLowerCase();
+                        const itemProv = String(item.provider || item.name || '').toLowerCase();
+                        const pKey = p.key.toLowerCase();
+                        return itemId.includes(pKey) || itemProv.includes(pKey) || itemId === `api_${index + 1}`;
+                    });
+                }
 
-                const status = realData ? realData.status : "Server Unreachable";
-                const tokensUsed = realData ? realData.tokens_used : 0;
-                const remaining = realData ? realData.remaining : 0;
+                // Determine Status & Tokens
+                let status = apiData ? "Awaiting API Key" : "Server Unreachable";
+                let tokensUsed = 0;
 
+                if (realData) {
+                    status = realData.status || "Connected & Active";
+                    tokensUsed = realData.tokens_used || realData.tokens || 0;
+                }
+
+                // Status Formatting
                 let dotClass = "dot-red";
                 let borderColor = "var(--red)";
                 let statusColor = "var(--red)";
 
-                if (status === "Connected & Active") {
+                if (status === "Connected & Active" || status === "Connected" || status === "Active" || status === "OK") {
                     dotClass = "dot-green";
                     borderColor = "var(--green)";
                     statusColor = "var(--green)";
+                    status = "Connected & Active";
                 } else if (status === "Awaiting API Key" || status === "Rate Limited") {
                     dotClass = "dot-yellow";
                     borderColor = "var(--yellow)";
                     statusColor = "var(--yellow)";
                 }
 
-                // Add to Select Dropdown
-                apiSelect.innerHTML += `<option value="${defaultApi.id}">Force Route: ${defaultApi.id} (${defaultApi.provider})</option>`;
+                // Populate Dropdown Options
+                apiSelect.innerHTML += `<option value="${p.id}">Force Route: ${p.id} (${p.name})</option>`;
 
-                // Render Card
+                // Append API Card to DOM
                 apiList.innerHTML += `
                     <div class="api-card" style="border-left-color: ${borderColor};">
                         <div class="api-info">
-                            <strong><span class="status-dot ${dotClass}"></span>${defaultApi.id}: ${defaultApi.provider}</strong>
-                            <small>Model: ${defaultApi.model} | Used: ${tokensUsed.toLocaleString()} tokens</small>
+                            <strong><span class="status-dot ${dotClass}"></span>${p.id}: ${p.name}</strong>
+                            <small>Model: ${realData?.model || p.model} | Used: ${tokensUsed.toLocaleString()} tokens</small>
                         </div>
                         <div style="color: ${statusColor}; font-weight: bold; font-size: 0.8rem; text-align: right;">
                             ${status}
@@ -266,195 +281,6 @@
                 if (response.ok) {
                     chatbox.innerHTML += `
                         <div class="msg abdullah">
-                            ${escapeHtml(data.reply || "No response received.")}
-                            <div style="font-size: 0.7rem; color: var(--gray); margin-top: 5px; text-align: right;">
-                                ⚡ Routed via ${data.provider || "Auto Engine"}
-                            </div>
-                        </div>`;
-                } else {
-                    chatbox.innerHTML += `<div class="msg abdullah" style="color:var(--red);">⚠️ Error: ${escapeHtml(data.detail || "Server error")}</div>`;
-                }
-
-            } catch (error) {
-                chatbox.innerHTML += `<div class="msg abdullah" style="color:var(--red);">⚠️ Network Error: Unable to reach backend server.</div>`;
-            } finally {
-                chatbox.scrollTop = chatbox.scrollHeight;
-                input.disabled = false;
-                sendBtn.disabled = false;
-                input.focus();
-                
-                // Refresh Dashboard Metrics
-                updateDashboard();
-            }
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Auto-run dashboard check on page load and refresh every 15 seconds
-        window.onload = () => {
-            updateDashboard();
-            setInterval(updateDashboard, 15000);
-        };
-        <script>
-        // 🔑 YOUR EXPLICIT RENDER BACKEND URL
-        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com";
-
-        // Standard Provider Catalog
-        const PROVIDERS = [
-            { key: "groq", name: "Groq", model: "llama-3.3-70b-versatile" },
-            { key: "cerebras", name: "Cerebras", model: "llama3.3-70b" },
-            { key: "gemini", name: "Gemini", model: "gemini-2.5-flash" },
-            { key: "openrouter", name: "OpenRouter", model: "meta-llama/llama-3.3-70b" },
-            { key: "deepseek", name: "DeepSeek", model: "deepseek-chat" }
-        ];
-
-        async function updateDashboard() {
-            const startTime = Date.now();
-            const statusBox = document.getElementById('connection-status');
-            const pingLabel = document.getElementById('ping-time');
-
-            try {
-                const response = await fetch(`${BACKEND_URL}/dashboard`, { cache: "no-store" });
-                const latency = Date.now() - startTime;
-                if (pingLabel) pingLabel.innerText = `Latency: ${latency}ms`;
-
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
-                const data = await response.json();
-
-                // 1. Connection Status
-                statusBox.innerHTML = `<span class="status-dot dot-green"></span> Connected (${latency}ms)`;
-                statusBox.style.color = "var(--green)";
-
-                // 2. Global Token Counters
-                const used = data.combined_tokens_used || data.total_tokens_used || 0;
-                const remaining = data.combined_tokens_remaining || data.total_tokens_remaining || 0;
-                const capacity = (used + remaining) || 1;
-                const usedPercentage = Math.min(100, Math.round((used / capacity) * 100));
-
-                document.getElementById('global-tokens').innerText = used.toLocaleString();
-                document.getElementById('global-remaining').innerText = remaining.toLocaleString();
-                document.getElementById('working-count').innerText = data.connected_apis || data.active_apis || (data.api_breakdown ? data.api_breakdown.filter(a => a.status && !a.status.includes('Error')).length : 1);
-                
-                const bar = document.getElementById('token-bar');
-                if (bar) bar.style.width = `${usedPercentage}%`;
-
-                // 3. Render API Cards
-                renderApiCards(data.api_breakdown || data.apis);
-
-            } catch (err) {
-                console.error("Dashboard Sync Error:", err);
-                statusBox.innerHTML = `<span class="status-dot dot-red"></span> Disconnected`;
-                statusBox.style.color = "var(--red)";
-                if (pingLabel) pingLabel.innerText = "Latency: Offline";
-
-                renderApiCards(null);
-            }
-        }
-
-        function renderApiCards(apiData) {
-            const apiList = document.getElementById('api-list');
-            const apiSelect = document.getElementById('apiSelect');
-            
-            const currentSelection = apiSelect.value;
-            apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
-            apiList.innerHTML = '';
-
-            PROVIDERS.forEach((p, index) => {
-                // Flexible matching for provider name or ID
-                let realData = null;
-                if (Array.isArray(apiData)) {
-                    realData = apiData.find(item => {
-                        const itemId = String(item.id || '').toLowerCase();
-                        const itemProv = String(item.provider || item.name || '').toLowerCase();
-                        const pKey = p.key.toLowerCase();
-                        return itemId.includes(pKey) || itemProv.includes(pKey) || itemId === `api_${index + 1}`;
-                    });
-                }
-
-                // Determine Status & Tokens
-                let status = "Server Unreachable";
-                let tokensUsed = 0;
-
-                if (realData) {
-                    status = realData.status || "Connected & Active";
-                    tokensUsed = realData.tokens_used || realData.tokens || 0;
-                } else if (apiData) {
-                    // Backend responded but this specific key wasn't in list
-                    status = "Awaiting API Key";
-                }
-
-                // Formatting Colors
-                let dotClass = "dot-red";
-                let borderColor = "var(--red)";
-                let statusColor = "var(--red)";
-
-                if (status === "Connected & Active" || status === "Connected" || status === "Active" || status === "OK") {
-                    dotClass = "dot-green";
-                    borderColor = "var(--green)";
-                    statusColor = "var(--green)";
-                    status = "Connected & Active";
-                } else if (status === "Awaiting API Key" || status === "Rate Limited") {
-                    dotClass = "dot-yellow";
-                    borderColor = "var(--yellow)";
-                    statusColor = "var(--yellow)";
-                }
-
-                // Populate Dropdown
-                const routeValue = realData?.id || p.key;
-                apiSelect.innerHTML += `<option value="${routeValue}">Force Route: ${p.name}</option>`;
-
-                // Append Card
-                apiList.innerHTML += `
-                    <div class="api-card" style="border-left-color: ${borderColor};">
-                        <div class="api-info">
-                            <strong><span class="status-dot ${dotClass}"></span>API_${index + 1}: ${p.name}</strong>
-                            <small>Model: ${realData?.model || p.model} | Used: ${tokensUsed.toLocaleString()} tokens</small>
-                        </div>
-                        <div style="color: ${statusColor}; font-weight: bold; font-size: 0.8rem; text-align: right;">
-                            ${status}
-                        </div>
-                    </div>
-                `;
-            });
-
-            apiSelect.value = currentSelection;
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('userInput');
-            const sendBtn = document.getElementById('sendBtn');
-            const chatbox = document.getElementById('chatbox');
-            const apiSelect = document.getElementById('apiSelect');
-            const text = input.value.trim();
-            if (!text) return;
-
-            chatbox.innerHTML += `<div class="msg sana">${escapeHtml(text)}</div>`;
-            input.value = '';
-            chatbox.scrollTop = chatbox.scrollHeight;
-
-            input.disabled = true;
-            sendBtn.disabled = true;
-
-            try {
-                const response = await fetch(`${BACKEND_URL}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: text,
-                        selected_api: apiSelect.value 
-                    })
-                });
-                
-                const data = await response.json();
-
-                if (response.ok) {
-                    chatbox.innerHTML += `
-                        <div class="msg abdullah">
                             ${escapeHtml(data.reply || data.response || "No response received.")}
                             <div style="font-size: 0.7rem; color: var(--gray); margin-top: 5px; text-align: right;">
                                 ⚡ Routed via ${data.provider || data.provider_used || "Auto Engine"}
@@ -472,7 +298,7 @@
                 sendBtn.disabled = false;
                 input.focus();
                 
-                // Immediately refresh tokens on the dashboard after replying
+                // Refresh metrics after chat response
                 setTimeout(updateDashboard, 500);
             }
         }
@@ -483,10 +309,11 @@
             return div.innerHTML;
         }
 
+        // Initialize on load & auto-poll every 12 seconds
         window.onload = () => {
             updateDashboard();
-            setInterval(updateDashboard, 10000);
+            setInterval(updateDashboard, 12000);
         };
-    </script> 
+    </script>
 </body>
 </html>
