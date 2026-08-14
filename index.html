@@ -299,6 +299,194 @@
             updateDashboard();
             setInterval(updateDashboard, 15000);
         };
-    </script>
+        <script>
+        // 🔑 YOUR EXPLICIT RENDER BACKEND URL
+        const BACKEND_URL = "https://abdullah-ai-backend.onrender.com";
+
+        // Standard Provider Catalog
+        const PROVIDERS = [
+            { key: "groq", name: "Groq", model: "llama-3.3-70b-versatile" },
+            { key: "cerebras", name: "Cerebras", model: "llama3.3-70b" },
+            { key: "gemini", name: "Gemini", model: "gemini-2.5-flash" },
+            { key: "openrouter", name: "OpenRouter", model: "meta-llama/llama-3.3-70b" },
+            { key: "deepseek", name: "DeepSeek", model: "deepseek-chat" }
+        ];
+
+        async function updateDashboard() {
+            const startTime = Date.now();
+            const statusBox = document.getElementById('connection-status');
+            const pingLabel = document.getElementById('ping-time');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/dashboard`, { cache: "no-store" });
+                const latency = Date.now() - startTime;
+                if (pingLabel) pingLabel.innerText = `Latency: ${latency}ms`;
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const data = await response.json();
+
+                // 1. Connection Status
+                statusBox.innerHTML = `<span class="status-dot dot-green"></span> Connected (${latency}ms)`;
+                statusBox.style.color = "var(--green)";
+
+                // 2. Global Token Counters
+                const used = data.combined_tokens_used || data.total_tokens_used || 0;
+                const remaining = data.combined_tokens_remaining || data.total_tokens_remaining || 0;
+                const capacity = (used + remaining) || 1;
+                const usedPercentage = Math.min(100, Math.round((used / capacity) * 100));
+
+                document.getElementById('global-tokens').innerText = used.toLocaleString();
+                document.getElementById('global-remaining').innerText = remaining.toLocaleString();
+                document.getElementById('working-count').innerText = data.connected_apis || data.active_apis || (data.api_breakdown ? data.api_breakdown.filter(a => a.status && !a.status.includes('Error')).length : 1);
+                
+                const bar = document.getElementById('token-bar');
+                if (bar) bar.style.width = `${usedPercentage}%`;
+
+                // 3. Render API Cards
+                renderApiCards(data.api_breakdown || data.apis);
+
+            } catch (err) {
+                console.error("Dashboard Sync Error:", err);
+                statusBox.innerHTML = `<span class="status-dot dot-red"></span> Disconnected`;
+                statusBox.style.color = "var(--red)";
+                if (pingLabel) pingLabel.innerText = "Latency: Offline";
+
+                renderApiCards(null);
+            }
+        }
+
+        function renderApiCards(apiData) {
+            const apiList = document.getElementById('api-list');
+            const apiSelect = document.getElementById('apiSelect');
+            
+            const currentSelection = apiSelect.value;
+            apiSelect.innerHTML = `<option value="auto">⚡ Auto-Switch / Failover Mode (Recommended)</option>`;
+            apiList.innerHTML = '';
+
+            PROVIDERS.forEach((p, index) => {
+                // Flexible matching for provider name or ID
+                let realData = null;
+                if (Array.isArray(apiData)) {
+                    realData = apiData.find(item => {
+                        const itemId = String(item.id || '').toLowerCase();
+                        const itemProv = String(item.provider || item.name || '').toLowerCase();
+                        const pKey = p.key.toLowerCase();
+                        return itemId.includes(pKey) || itemProv.includes(pKey) || itemId === `api_${index + 1}`;
+                    });
+                }
+
+                // Determine Status & Tokens
+                let status = "Server Unreachable";
+                let tokensUsed = 0;
+
+                if (realData) {
+                    status = realData.status || "Connected & Active";
+                    tokensUsed = realData.tokens_used || realData.tokens || 0;
+                } else if (apiData) {
+                    // Backend responded but this specific key wasn't in list
+                    status = "Awaiting API Key";
+                }
+
+                // Formatting Colors
+                let dotClass = "dot-red";
+                let borderColor = "var(--red)";
+                let statusColor = "var(--red)";
+
+                if (status === "Connected & Active" || status === "Connected" || status === "Active" || status === "OK") {
+                    dotClass = "dot-green";
+                    borderColor = "var(--green)";
+                    statusColor = "var(--green)";
+                    status = "Connected & Active";
+                } else if (status === "Awaiting API Key" || status === "Rate Limited") {
+                    dotClass = "dot-yellow";
+                    borderColor = "var(--yellow)";
+                    statusColor = "var(--yellow)";
+                }
+
+                // Populate Dropdown
+                const routeValue = realData?.id || p.key;
+                apiSelect.innerHTML += `<option value="${routeValue}">Force Route: ${p.name}</option>`;
+
+                // Append Card
+                apiList.innerHTML += `
+                    <div class="api-card" style="border-left-color: ${borderColor};">
+                        <div class="api-info">
+                            <strong><span class="status-dot ${dotClass}"></span>API_${index + 1}: ${p.name}</strong>
+                            <small>Model: ${realData?.model || p.model} | Used: ${tokensUsed.toLocaleString()} tokens</small>
+                        </div>
+                        <div style="color: ${statusColor}; font-weight: bold; font-size: 0.8rem; text-align: right;">
+                            ${status}
+                        </div>
+                    </div>
+                `;
+            });
+
+            apiSelect.value = currentSelection;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const chatbox = document.getElementById('chatbox');
+            const apiSelect = document.getElementById('apiSelect');
+            const text = input.value.trim();
+            if (!text) return;
+
+            chatbox.innerHTML += `<div class="msg sana">${escapeHtml(text)}</div>`;
+            input.value = '';
+            chatbox.scrollTop = chatbox.scrollHeight;
+
+            input.disabled = true;
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: text,
+                        selected_api: apiSelect.value 
+                    })
+                });
+                
+                const data = await response.json();
+
+                if (response.ok) {
+                    chatbox.innerHTML += `
+                        <div class="msg abdullah">
+                            ${escapeHtml(data.reply || data.response || "No response received.")}
+                            <div style="font-size: 0.7rem; color: var(--gray); margin-top: 5px; text-align: right;">
+                                ⚡ Routed via ${data.provider || data.provider_used || "Auto Engine"}
+                            </div>
+                        </div>`;
+                } else {
+                    chatbox.innerHTML += `<div class="msg abdullah" style="color:var(--red);">⚠️ Error: ${escapeHtml(data.detail || "Server error")}</div>`;
+                }
+
+            } catch (error) {
+                chatbox.innerHTML += `<div class="msg abdullah" style="color:var(--red);">⚠️ Network Error sending message.</div>`;
+            } finally {
+                chatbox.scrollTop = chatbox.scrollHeight;
+                input.disabled = false;
+                sendBtn.disabled = false;
+                input.focus();
+                
+                // Immediately refresh tokens on the dashboard after replying
+                setTimeout(updateDashboard, 500);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        window.onload = () => {
+            updateDashboard();
+            setInterval(updateDashboard, 10000);
+        };
+    </script> 
 </body>
 </html>
